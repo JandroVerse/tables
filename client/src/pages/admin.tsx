@@ -201,38 +201,39 @@ export default function AdminPage() {
                                     {new Date(request.createdAt).toLocaleTimeString()}
                                   </p>
                                 </div>
-                                <div className="flex flex-col sm:flex-row gap-3">
+                                <div className="flex flex-row gap-2">
                                   {status !== "completed" && (
                                     <>
-                                      <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                            <Button variant="outline" className="w-full sm:w-[100px]">
-                                              Clear
-                                            </Button>
-                                          </motion.div>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                          <AlertDialogHeader>
-                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                              This will remove the request from the queue.
-                                              This action cannot be undone.
-                                            </AlertDialogDescription>
-                                          </AlertDialogHeader>
-                                          <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                            <AlertDialogAction
-                                              onClick={() => clearRequest(request.id)}
-                                            >
-                                              Clear Request
-                                            </AlertDialogAction>
-                                          </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                      </AlertDialog>
+                                      {status === "pending" && (
+                                        <AlertDialog>
+                                          <AlertDialogTrigger asChild>
+                                            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                              <Button variant="outline">
+                                                Clear
+                                              </Button>
+                                            </motion.div>
+                                          </AlertDialogTrigger>
+                                          <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                              <AlertDialogDescription>
+                                                This will remove the request from the queue.
+                                                This action cannot be undone.
+                                              </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                              <AlertDialogAction
+                                                onClick={() => clearRequest(request.id)}
+                                              >
+                                                Clear Request
+                                              </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                          </AlertDialogContent>
+                                        </AlertDialog>
+                                      )}
                                       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                                         <Button
-                                          className="w-full sm:w-[100px]"
                                           onClick={() =>
                                             updateRequest({
                                               id: request.id,
