@@ -140,7 +140,7 @@ export default function TablePage() {
               <Receipt className="h-8 w-8" />
               <span>Get Check</span>
             </Button>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen} preventScroll={true}>
               <Button
                 size="lg"
                 variant="outline"
@@ -164,6 +164,7 @@ export default function TablePage() {
                       onChange={(e) => setOtherRequestNote(e.target.value)}
                       className="min-h-[40px]"
                       autoFocus={false}
+                      tabIndex={-1}
                     />
                   </div>
                 </div>
