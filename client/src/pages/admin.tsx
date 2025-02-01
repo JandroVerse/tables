@@ -20,6 +20,19 @@ import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
 import type { Request, Table } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { motion, AnimatePresence } from "framer-motion";
+
+const cardVariants = {
+  initial: { opacity: 0, scale: 0.95 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
+};
+
+const columnVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -20 }
+};
 
 export default function AdminPage() {
   const { toast } = useToast();
@@ -112,11 +125,18 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-[1600px] mx-auto space-y-4">
+      <motion.div
+        className="max-w-[1600px] mx-auto space-y-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Restaurant Admin Dashboard</h1>
           <Link href="/qr">
-            <Button variant="outline">View QR Codes</Button>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button variant="outline">View QR Codes</Button>
+            </motion.div>
           </Link>
         </div>
 
@@ -130,90 +150,117 @@ export default function AdminPage() {
               value={newTableName}
               onChange={(e) => setNewTableName(e.target.value)}
             />
-            <Button onClick={() => newTableName && createTable(newTableName)}>
-              Create Table
-            </Button>
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button onClick={() => newTableName && createTable(newTableName)}>
+                Create Table
+              </Button>
+            </motion.div>
           </CardContent>
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {statuses.map((status) => (
-            <Card key={status} className="h-[calc(100vh-300px)]">
-              <CardHeader>
-                <CardTitle>{statusTitles[status]}</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-400px)]">
-                  <div className="space-y-2 p-4">
-                    {getSortedRequests(status).map((request) => (
-                      <Card key={request.id}>
-                        <CardContent className="flex items-center justify-between p-4">
-                          <div>
-                            <h3 className="font-medium">
-                              {getTableName(request.tableId)} - {request.type}
-                            </h3>
-                            {request.notes && (
-                              <p className="text-sm text-gray-600 mt-1">
-                                Request: {request.notes}
-                              </p>
-                            )}
-                            <p className="text-sm text-gray-500">
-                              {new Date(request.createdAt).toLocaleTimeString()}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            {status !== "completed" && (
-                              <>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="outline">
-                                      Clear
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        This will remove the request from the queue. 
-                                        This action cannot be undone.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={() => clearRequest(request.id)}
-                                      >
-                                        Clear Request
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                                <Button
-                                  onClick={() =>
-                                    updateRequest({
-                                      id: request.id,
-                                      status:
-                                        status === "pending"
-                                          ? "in_progress"
-                                          : "completed",
-                                    })
-                                  }
-                                >
-                                  {status === "pending" ? "Start" : "Complete"}
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
+            <motion.div
+              key={status}
+              variants={columnVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={{ duration: 0.5 }}
+            >
+              <Card className="h-[calc(100vh-300px)]">
+                <CardHeader>
+                  <CardTitle>{statusTitles[status]}</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[calc(100vh-400px)]">
+                    <div className="space-y-2 p-4">
+                      <AnimatePresence mode="popLayout">
+                        {getSortedRequests(status).map((request) => (
+                          <motion.div
+                            key={request.id}
+                            layout
+                            variants={cardVariants}
+                            initial="initial"
+                            animate="animate"
+                            exit="exit"
+                            layoutId={`request-${request.id}`}
+                          >
+                            <Card>
+                              <CardContent className="flex items-center justify-between p-4">
+                                <div>
+                                  <h3 className="font-medium">
+                                    {getTableName(request.tableId)} - {request.type}
+                                  </h3>
+                                  {request.notes && (
+                                    <p className="text-sm text-gray-600 mt-1">
+                                      Request: {request.notes}
+                                    </p>
+                                  )}
+                                  <p className="text-sm text-gray-500">
+                                    {new Date(request.createdAt).toLocaleTimeString()}
+                                  </p>
+                                </div>
+                                <div className="flex gap-2">
+                                  {status !== "completed" && (
+                                    <>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                            <Button variant="outline">
+                                              Clear
+                                            </Button>
+                                          </motion.div>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              This will remove the request from the queue.
+                                              This action cannot be undone.
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() => clearRequest(request.id)}
+                                            >
+                                              Clear Request
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                        <Button
+                                          onClick={() =>
+                                            updateRequest({
+                                              id: request.id,
+                                              status:
+                                                status === "pending"
+                                                  ? "in_progress"
+                                                  : "completed",
+                                            })
+                                          }
+                                        >
+                                          {status === "pending" ? "Start" : "Complete"}
+                                        </Button>
+                                      </motion.div>
+                                    </>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </motion.div>
           ))}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
