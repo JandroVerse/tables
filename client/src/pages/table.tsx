@@ -138,7 +138,9 @@ export default function TablePage() {
 
   const hasActiveRequest = (type: string) => {
     return requests.some(
-      (request) => request.type === type && request.status !== "completed"
+      (request) => request.type === type && 
+      request.status !== "completed" && 
+      request.status !== "cleared"
     );
   };
 
