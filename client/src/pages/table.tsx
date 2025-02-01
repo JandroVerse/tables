@@ -163,6 +163,7 @@ export default function TablePage() {
                       value={otherRequestNote}
                       onChange={(e) => setOtherRequestNote(e.target.value)}
                       className="min-h-[40px]"
+                      autoFocus={false}
                     />
                   </div>
                 </div>
