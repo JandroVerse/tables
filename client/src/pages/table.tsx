@@ -150,7 +150,7 @@ export default function TablePage() {
                 <Clock className="h-8 w-8" />
                 <span>Other Request</span>
               </Button>
-              <DialogContent className="sm:bottom-auto bottom-0 fixed p-0">
+              <DialogContent className="fixed p-0 bottom-0 left-0 right-0 sm:relative sm:rounded-lg">
                 <DialogHeader className="p-6 pb-0">
                   <DialogTitle>Other Request</DialogTitle>
                 </DialogHeader>
