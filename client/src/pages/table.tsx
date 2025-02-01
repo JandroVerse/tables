@@ -254,7 +254,7 @@ export default function TablePage() {
               <TabsContent value="active" className="mt-4">
                 <div className="space-y-3">
                   {requests
-                    .filter((r) => r.status !== "completed")
+                    .filter((r) => r.status !== "completed" && r.status !== "cleared")
                     .map((request) => (
                       <Card key={request.id} className="overflow-hidden transition-colors hover:bg-green-50/50">
                         <CardContent className="p-4">
