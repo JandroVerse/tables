@@ -8,10 +8,25 @@
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground overflow-x-hidden;
+    @apply font-sans antialiased bg-background text-foreground overflow-x-hidden min-h-screen;
   }
 
   [data-radix-dialog-content] {
     @apply w-full mx-auto;
   }
+
+  /* Smooth transitions for interactive elements */
+  button, a {
+    @apply transition-all duration-200;
+  }
+
+  /* Enhanced card styling */
+  .card {
+    @apply shadow-lg hover:shadow-xl transition-shadow duration-200;
+  }
+}
+
+/* Custom gradient text utility */
+.gradient-text {
+  @apply bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent;
 }
