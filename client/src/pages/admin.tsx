@@ -16,6 +16,12 @@ export default function AdminPage() {
 
   useEffect(() => {
     wsService.connect();
+    const unsubscribe = wsService.subscribe((data) => {
+      if (data.type === "new_request" || data.type === "update_request") {
+        refetch();
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   const { data: requests = [], refetch } = useQuery<Request[]>({
