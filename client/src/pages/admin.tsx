@@ -113,6 +113,11 @@ export default function AdminPage() {
                               <h3 className="font-medium">
                                 {getTableName(request.tableId)} - {request.type}
                               </h3>
+                              {request.notes && (
+                                <p className="text-sm text-gray-600 mt-1">
+                                  Request: {request.notes}
+                                </p>
+                              )}
                               <p className="text-sm text-gray-500">
                                 {new Date(request.createdAt).toLocaleTimeString()}
                               </p>

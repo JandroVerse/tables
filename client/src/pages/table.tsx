@@ -124,11 +124,11 @@ export default function TablePage() {
                   <span>Other Request</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
+              <DialogContent className="sm:bottom-auto bottom-0 p-0">
+                <DialogHeader className="p-6 pb-0">
                   <DialogTitle>Other Request</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
+                <div className="px-6 py-4">
                   <div className="space-y-2">
                     <Label htmlFor="message">Your Request</Label>
                     <Input
@@ -136,11 +136,12 @@ export default function TablePage() {
                       placeholder="Type your request here..."
                       value={otherRequestNote}
                       onChange={(e) => setOtherRequestNote(e.target.value)}
+                      className="min-h-[80px]"
                     />
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button onClick={handleOtherRequest}>Send Request</Button>
+                <DialogFooter className="p-6 pt-0">
+                  <Button onClick={handleOtherRequest} className="w-full">Send Request</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
