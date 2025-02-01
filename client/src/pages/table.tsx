@@ -8,7 +8,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -142,17 +141,16 @@ export default function TablePage() {
               <span>Get Check</span>
             </Button>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="h-24 flex flex-col items-center justify-center space-y-2"
-                >
-                  <Clock className="h-8 w-8" />
-                  <span>Other Request</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:bottom-auto bottom-0 p-0">
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-24 flex flex-col items-center justify-center space-y-2"
+                onClick={() => setIsDialogOpen(true)}
+              >
+                <Clock className="h-8 w-8" />
+                <span>Other Request</span>
+              </Button>
+              <DialogContent className="sm:bottom-auto bottom-0 fixed p-0">
                 <DialogHeader className="p-6 pb-0">
                   <DialogTitle>Other Request</DialogTitle>
                 </DialogHeader>
@@ -164,12 +162,13 @@ export default function TablePage() {
                       placeholder="Type your request here..."
                       value={otherRequestNote}
                       onChange={(e) => setOtherRequestNote(e.target.value)}
-                      className="min-h-[80px]"
                     />
                   </div>
                 </div>
                 <DialogFooter className="p-6 pt-0">
-                  <Button onClick={handleOtherRequest} className="w-full">Send Request</Button>
+                  <Button onClick={handleOtherRequest} className="w-full">
+                    Send Request
+                  </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
