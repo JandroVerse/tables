@@ -1,7 +1,6 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect, useState } from "react";
@@ -9,9 +8,11 @@ import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
 import type { Request, Table } from "@db/schema";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function AdminPage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [newTableName, setNewTableName] = useState("");
 
   useEffect(() => {
@@ -64,9 +65,16 @@ export default function AdminPage() {
     return table ? table.name : `Table ${tableId}`;
   };
 
+  const statuses = ["pending", "in_progress", "completed"] as const;
+  const statusTitles = {
+    pending: "Pending Requests",
+    in_progress: "In Progress",
+    completed: "Completed",
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-4xl mx-auto space-y-4">
+      <div className="max-w-[1600px] mx-auto space-y-4">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">Restaurant Admin Dashboard</h1>
           <Link href="/qr">
@@ -90,20 +98,15 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Service Requests</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="pending">
-              <TabsList>
-                <TabsTrigger value="pending">Pending</TabsTrigger>
-                <TabsTrigger value="in_progress">In Progress</TabsTrigger>
-                <TabsTrigger value="completed">Completed</TabsTrigger>
-              </TabsList>
-              {["pending", "in_progress", "completed"].map((status) => (
-                <TabsContent key={status} value={status}>
-                  <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {statuses.map((status) => (
+            <Card key={status} className="h-[calc(100vh-300px)]">
+              <CardHeader>
+                <CardTitle>{statusTitles[status]}</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  <div className="space-y-2 p-4">
                     {requests
                       .filter((r) => r.status === status)
                       .map((request) => (
@@ -141,11 +144,11 @@ export default function AdminPage() {
                         </Card>
                       ))}
                   </div>
-                </TabsContent>
-              ))}
-            </Tabs>
-          </CardContent>
-        </Card>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
   );
