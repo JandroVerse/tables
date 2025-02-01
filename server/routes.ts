@@ -41,9 +41,15 @@ export function registerRoutes(app: Express): Server {
   app.post("/api/tables", async (req, res) => {
     const { name } = req.body;
 
-    // Generate unique QR code for this table
+    // First create the table to get its ID
+    const [table] = await db.insert(tables).values({
+      name,
+      qrCode: '', // Temporary empty value
+    }).returning();
+
+    // Generate QR code with the actual table ID
     const qrCodeSvg = await QRCode.toString(
-      `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table?id=${name}`,
+      `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table?id=${table.id}`,
       { 
         type: 'svg',
         width: 256,
@@ -55,12 +61,14 @@ export function registerRoutes(app: Express): Server {
       }
     );
 
-    const [table] = await db.insert(tables).values({
-      name,
-      qrCode: qrCodeSvg,
-    }).returning();
+    // Update the table with the generated QR code
+    const [updatedTable] = await db
+      .update(tables)
+      .set({ qrCode: qrCodeSvg })
+      .where(eq(tables.id, table.id))
+      .returning();
 
-    res.json(table);
+    res.json(updatedTable);
   });
 
   // Request routes
