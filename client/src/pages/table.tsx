@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -11,30 +11,47 @@ import type { Request } from "@db/schema";
 
 export default function TablePage() {
   const { toast } = useToast();
-  const tableId = new URLSearchParams(window.location.search).get("id");
+  const queryClient = useQueryClient();
+  const tableId = Number(new URLSearchParams(window.location.search).get("id"));
 
   useEffect(() => {
     wsService.connect();
-  }, []);
+    const unsubscribe = wsService.subscribe((data) => {
+      if (data.type === "new_request" || data.type === "update_request") {
+        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+      }
+    });
+    return () => unsubscribe();
+  }, [tableId, queryClient]);
 
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", tableId],
-    enabled: !!tableId,
+    enabled: !!tableId && !isNaN(tableId),
   });
 
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
-      return apiRequest("POST", "/api/requests", { tableId, type, notes });
+      const response = await apiRequest("POST", "/api/requests", { tableId, type, notes });
+      return response.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
       toast({
         title: "Request sent",
         description: "Staff has been notified of your request.",
       });
     },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to send request. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Failed to create request:", error);
+    },
   });
 
-  if (!tableId) return <div>Invalid table</div>;
+  if (!tableId || isNaN(tableId)) return <div>Invalid table ID</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
