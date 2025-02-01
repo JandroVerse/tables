@@ -67,11 +67,31 @@ export default function TablePage() {
 
   if (!tableId || isNaN(tableId)) return <div>Invalid table ID</div>;
 
+  // Check if there's an active request of a specific type
+  const hasActiveRequest = (type: string) => {
+    return requests.some(
+      (request) => request.type === type && request.status !== "completed"
+    );
+  };
+
   const handleOtherRequest = () => {
     if (!otherRequestNote.trim()) {
       toast({
         title: "Error",
         description: "Please enter a message for your request.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Check if there's already an active "other" request with the same note
+    if (hasActiveRequest("other") && requests.some(
+      (r) => r.type === "other" && 
+            r.notes === otherRequestNote && 
+            r.status !== "completed"
+    )) {
+      toast({
+        title: "Request already exists",
+        description: "This request is already being processed.",
         variant: "destructive",
       });
       return;
@@ -93,6 +113,8 @@ export default function TablePage() {
               size="lg"
               className="h-24 flex flex-col items-center justify-center space-y-2"
               onClick={() => createRequest({ type: "waiter" })}
+              disabled={hasActiveRequest("waiter")}
+              title={hasActiveRequest("waiter") ? "A waiter is already on their way" : ""}
             >
               <Bell className="h-8 w-8" />
               <span>Call Waiter</span>
@@ -101,6 +123,8 @@ export default function TablePage() {
               size="lg"
               className="h-24 flex flex-col items-center justify-center space-y-2"
               onClick={() => createRequest({ type: "water" })}
+              disabled={hasActiveRequest("water")}
+              title={hasActiveRequest("water") ? "Water refill request is being processed" : ""}
             >
               <GlassWater className="h-8 w-8" />
               <span>Water Refill</span>
@@ -109,6 +133,8 @@ export default function TablePage() {
               size="lg"
               className="h-24 flex flex-col items-center justify-center space-y-2"
               onClick={() => createRequest({ type: "check" })}
+              disabled={hasActiveRequest("check")}
+              title={hasActiveRequest("check") ? "Check request is being processed" : ""}
             >
               <Receipt className="h-8 w-8" />
               <span>Get Check</span>
