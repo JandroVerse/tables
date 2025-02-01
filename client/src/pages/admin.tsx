@@ -72,6 +72,21 @@ export default function AdminPage() {
     completed: "Completed",
   };
 
+  // Sort requests based on status
+  const getSortedRequests = (status: string) => {
+    return requests
+      .filter((r) => r.status === status)
+      .sort((a, b) => {
+        if (status === "completed") {
+          // For completed requests, sort by completedAt in descending order (newest first)
+          return new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime();
+        } else {
+          // For other statuses, sort by createdAt in ascending order (oldest first)
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }
+      });
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-[1600px] mx-auto space-y-4">
@@ -107,42 +122,40 @@ export default function AdminPage() {
               <CardContent className="p-0">
                 <ScrollArea className="h-[calc(100vh-400px)]">
                   <div className="space-y-2 p-4">
-                    {requests
-                      .filter((r) => r.status === status)
-                      .map((request) => (
-                        <Card key={request.id}>
-                          <CardContent className="flex items-center justify-between p-4">
-                            <div>
-                              <h3 className="font-medium">
-                                {getTableName(request.tableId)} - {request.type}
-                              </h3>
-                              {request.notes && (
-                                <p className="text-sm text-gray-600 mt-1">
-                                  Request: {request.notes}
-                                </p>
-                              )}
-                              <p className="text-sm text-gray-500">
-                                {new Date(request.createdAt).toLocaleTimeString()}
+                    {getSortedRequests(status).map((request) => (
+                      <Card key={request.id}>
+                        <CardContent className="flex items-center justify-between p-4">
+                          <div>
+                            <h3 className="font-medium">
+                              {getTableName(request.tableId)} - {request.type}
+                            </h3>
+                            {request.notes && (
+                              <p className="text-sm text-gray-600 mt-1">
+                                Request: {request.notes}
                               </p>
-                            </div>
-                            {status !== "completed" && (
-                              <Button
-                                onClick={() =>
-                                  updateRequest({
-                                    id: request.id,
-                                    status:
-                                      status === "pending"
-                                        ? "in_progress"
-                                        : "completed",
-                                  })
-                                }
-                              >
-                                {status === "pending" ? "Start" : "Complete"}
-                              </Button>
                             )}
-                          </CardContent>
-                        </Card>
-                      ))}
+                            <p className="text-sm text-gray-500">
+                              {new Date(request.createdAt).toLocaleTimeString()}
+                            </p>
+                          </div>
+                          {status !== "completed" && (
+                            <Button
+                              onClick={() =>
+                                updateRequest({
+                                  id: request.id,
+                                  status:
+                                    status === "pending"
+                                      ? "in_progress"
+                                      : "completed",
+                                })
+                              }
+                            >
+                              {status === "pending" ? "Start" : "Complete"}
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 </ScrollArea>
               </CardContent>
