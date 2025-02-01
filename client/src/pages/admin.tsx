@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
-import type { Request } from "@db/schema";
+import type { Request, Table } from "@db/schema";
 
 export default function AdminPage() {
   const { toast } = useToast();
@@ -26,6 +26,10 @@ export default function AdminPage() {
 
   const { data: requests = [], refetch } = useQuery<Request[]>({
     queryKey: ["/api/requests"],
+  });
+
+  const { data: tables = [] } = useQuery<Table[]>({
+    queryKey: ["/api/tables"],
   });
 
   const { mutate: createTable } = useMutation({
@@ -53,6 +57,12 @@ export default function AdminPage() {
       });
     },
   });
+
+  // Helper function to get table name
+  const getTableName = (tableId: number) => {
+    const table = tables.find(t => t.id === tableId);
+    return table ? table.name : `Table ${tableId}`;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -101,7 +111,7 @@ export default function AdminPage() {
                           <CardContent className="flex items-center justify-between p-4">
                             <div>
                               <h3 className="font-medium">
-                                Table {request.tableId} - {request.type}
+                                {getTableName(request.tableId)} - {request.type}
                               </h3>
                               <p className="text-sm text-gray-500">
                                 {new Date(request.createdAt).toLocaleTimeString()}
