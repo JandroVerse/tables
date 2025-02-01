@@ -81,8 +81,8 @@ export default function AdminPage() {
           // For completed requests, sort by completedAt in descending order (newest first)
           return new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime();
         } else {
-          // For other statuses, sort by createdAt in ascending order (oldest first)
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          // For other statuses, sort by createdAt in descending order (newest first)
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         }
       });
   };
