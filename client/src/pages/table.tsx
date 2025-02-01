@@ -99,7 +99,7 @@ export default function TablePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-4">
+    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white p-4">
       <Card className="max-w-md mx-auto shadow-lg border-0">
         <CardHeader className="pb-4">
           <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
@@ -188,7 +188,7 @@ export default function TablePage() {
                   {requests
                     .filter((r) => r.status !== "completed")
                     .map((request) => (
-                      <Card key={request.id} className="overflow-hidden transition-colors hover:bg-gray-50">
+                      <Card key={request.id} className="overflow-hidden transition-colors hover:bg-green-50/50">
                         <CardContent className="p-4">
                           <div className="font-medium text-primary">{request.type}</div>
                           {request.notes && (
@@ -207,7 +207,7 @@ export default function TablePage() {
                   {requests
                     .filter((r) => r.status === "completed")
                     .map((request) => (
-                      <Card key={request.id} className="overflow-hidden transition-colors hover:bg-gray-50">
+                      <Card key={request.id} className="overflow-hidden transition-colors hover:bg-green-50/50">
                         <CardContent className="p-4">
                           <div className="font-medium text-primary">{request.type}</div>
                           {request.notes && (
