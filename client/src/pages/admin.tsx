@@ -201,13 +201,13 @@ export default function AdminPage() {
                                     {new Date(request.createdAt).toLocaleTimeString()}
                                   </p>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-3">
                                   {status !== "completed" && (
                                     <>
                                       <AlertDialog>
                                         <AlertDialogTrigger asChild>
                                           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                            <Button variant="outline">
+                                            <Button variant="outline" className="w-full sm:w-[100px]">
                                               Clear
                                             </Button>
                                           </motion.div>
@@ -232,6 +232,7 @@ export default function AdminPage() {
                                       </AlertDialog>
                                       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                                         <Button
+                                          className="w-full sm:w-[100px]"
                                           onClick={() =>
                                             updateRequest({
                                               id: request.id,
