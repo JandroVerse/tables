@@ -4,13 +4,22 @@ import { relations } from "drizzle-orm";
 
 export const tables = pgTable("tables", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull(), // e.g. "Table 1", "Table 2"
+  name: text("name").notNull(),
   qrCode: text("qr_code").notNull(),
+});
+
+export const tableSessions = pgTable("table_sessions", {
+  id: serial("id").primaryKey(),
+  tableId: integer("table_id").references(() => tables.id).notNull(),
+  sessionId: text("session_id").notNull(),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
 });
 
 export const requests = pgTable("requests", {
   id: serial("id").primaryKey(),
   tableId: integer("table_id").references(() => tables.id).notNull(),
+  sessionId: text("session_id").notNull(),
   type: text("type", { enum: ["waiter", "water", "check", "other"] }).notNull(),
   status: text("status", { enum: ["pending", "in_progress", "completed"] }).default("pending").notNull(),
   notes: text("notes"),
@@ -21,12 +30,21 @@ export const requests = pgTable("requests", {
 export const feedback = pgTable("feedback", {
   id: serial("id").primaryKey(),
   requestId: integer("request_id").references(() => requests.id).notNull(),
-  rating: integer("rating").notNull(), // 1-5 rating
+  rating: integer("rating").notNull(),
   comment: text("comment"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const tableRelations = relations(tables, ({ many }) => ({
+  sessions: many(tableSessions),
+  requests: many(requests),
+}));
+
+export const tableSessionRelations = relations(tableSessions, ({ one, many }) => ({
+  table: one(tables, {
+    fields: [tableSessions.tableId],
+    references: [tables.id],
+  }),
   requests: many(requests),
 }));
 
@@ -53,5 +71,6 @@ export const insertFeedbackSchema = createInsertSchema(feedback);
 export const selectFeedbackSchema = createSelectSchema(feedback);
 
 export type Table = typeof tables.$inferSelect;
+export type TableSession = typeof tableSessions.$inferSelect;
 export type Request = typeof requests.$inferSelect;
 export type Feedback = typeof feedback.$inferSelect;

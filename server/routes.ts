@@ -2,9 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
-import { tables, requests, feedback } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { tables, requests, feedback, tableSessions } from "@db/schema";
+import { eq, and } from "drizzle-orm";
 import QRCode from "qrcode";
+import { nanoid } from "nanoid";
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
@@ -18,7 +19,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // WebSocket handling
   wss.on("connection", (ws: WebSocket) => {
     console.log("New WebSocket connection");
     ws.on("message", (message: string) => {
@@ -28,6 +28,31 @@ export function registerRoutes(app: Express): Server {
         }
       });
     });
+  });
+
+  // Session management
+  app.post("/api/tables/:tableId/sessions", async (req, res) => {
+    const tableId = Number(req.params.tableId);
+    const sessionId = nanoid();
+
+    // Close any existing active sessions for this table
+    await db.update(tableSessions)
+      .set({ endedAt: new Date() })
+      .where(and(
+        eq(tableSessions.tableId, tableId),
+        eq(tableSessions.endedAt, null)
+      ));
+
+    // Create new session
+    const [session] = await db.insert(tableSessions)
+      .values({
+        tableId,
+        sessionId,
+        startedAt: new Date(),
+      })
+      .returning();
+
+    res.json(session);
   });
 
   // Table routes
@@ -87,20 +112,30 @@ export function registerRoutes(app: Express): Server {
 
   // Request routes
   app.get("/api/requests", async (req, res) => {
-    const { tableId } = req.query;
-    const query = tableId
-      ? { where: eq(requests.tableId, Number(tableId)) }
-      : undefined;
+    const { tableId, sessionId } = req.query;
+    let query = {};
+
+    if (tableId && sessionId) {
+      query = {
+        where: and(
+          eq(requests.tableId, Number(tableId)),
+          eq(requests.sessionId, sessionId as string)
+        )
+      };
+    } else if (tableId) {
+      query = { where: eq(requests.tableId, Number(tableId)) };
+    }
 
     const allRequests = await db.query.requests.findMany(query);
     res.json(allRequests);
   });
 
   app.post("/api/requests", async (req, res) => {
-    const { tableId, type, notes } = req.body;
+    const { tableId, sessionId, type, notes } = req.body;
 
     const [request] = await db.insert(requests).values({
       tableId,
+      sessionId,
       type,
       notes,
     }).returning();
@@ -136,11 +171,10 @@ export function registerRoutes(app: Express): Server {
     res.json(request);
   });
 
-  // Feedback routes
+  // Feedback routes remain unchanged
   app.post("/api/feedback", async (req, res) => {
     const { requestId, rating, comment } = req.body;
 
-    // Check if the request exists and is completed
     const request = await db.query.requests.findFirst({
       where: eq(requests.id, requestId),
     });
@@ -155,7 +189,6 @@ export function registerRoutes(app: Express): Server {
       });
     }
 
-    // Check if feedback already exists
     const existingFeedback = await db.query.feedback.findFirst({
       where: eq(feedback.requestId, requestId),
     });
@@ -174,7 +207,6 @@ export function registerRoutes(app: Express): Server {
       })
       .returning();
 
-    // Notify connected clients about new feedback
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({ 

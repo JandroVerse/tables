@@ -26,6 +26,28 @@ export default function TablePage() {
   const [otherRequestNote, setOtherRequestNote] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  // Create a new session when the component mounts
+  useEffect(() => {
+    if (tableId && !isNaN(tableId)) {
+      apiRequest("POST", `/api/tables/${tableId}/sessions`)
+        .then((res) => res.json())
+        .then((session) => {
+          setSessionId(session.sessionId);
+          // Invalidate requests query to refresh with new session
+          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+        })
+        .catch((error) => {
+          console.error("Failed to create session:", error);
+          toast({
+            title: "Error",
+            description: "Failed to initialize table session.",
+            variant: "destructive",
+          });
+        });
+    }
+  }, [tableId]);
 
   useEffect(() => {
     wsService.connect();
@@ -39,12 +61,24 @@ export default function TablePage() {
 
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", tableId],
-    enabled: !!tableId && !isNaN(tableId),
+    queryFn: async () => {
+      if (!sessionId) return [];
+      const res = await fetch(`/api/requests?tableId=${tableId}&sessionId=${sessionId}`);
+      if (!res.ok) throw new Error('Failed to fetch requests');
+      return res.json();
+    },
+    enabled: !!tableId && !isNaN(tableId) && !!sessionId,
   });
 
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
-      const response = await apiRequest("POST", "/api/requests", { tableId, type, notes });
+      if (!sessionId) throw new Error('No active session');
+      const response = await apiRequest("POST", "/api/requests", { 
+        tableId, 
+        type, 
+        notes,
+        sessionId 
+      });
       return response.json();
     },
     onSuccess: () => {
@@ -67,6 +101,7 @@ export default function TablePage() {
   });
 
   if (!tableId || isNaN(tableId)) return <div>Invalid table ID</div>;
+  if (!sessionId) return <div>Initializing table session...</div>;
 
   const hasActiveRequest = (type: string) => {
     return requests.some(
