@@ -1,11 +1,48 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Table } from "@db/schema";
 
 export default function QRPage() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const { data: tables = [] } = useQuery<Table[]>({
     queryKey: ["/api/tables"],
+  });
+
+  const { mutate: deleteTable } = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/tables/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tables"] });
+      toast({
+        title: "Table deleted",
+        description: "The table has been deleted successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to delete table. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Failed to delete table:", error);
+    },
   });
 
   const downloadQR = (tableId: number, qrCode: string) => {
@@ -36,12 +73,38 @@ export default function QRPage() {
                     className="w-full mb-4"
                     dangerouslySetInnerHTML={{ __html: table.qrCode }}
                   />
-                  <Button
-                    className="w-full"
-                    onClick={() => downloadQR(table.id, table.qrCode)}
-                  >
-                    Download QR Code
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      className="w-full"
+                      onClick={() => downloadQR(table.id, table.qrCode)}
+                    >
+                      Download QR Code
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" className="w-full">
+                          Delete Table
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will permanently delete the table and all its associated service requests.
+                            This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deleteTable(table.id)}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </CardContent>
               </Card>
             ))}

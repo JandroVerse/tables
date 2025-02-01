@@ -38,6 +38,31 @@ export function registerRoutes(app: Express): Server {
     res.json(allTables);
   });
 
+  app.delete("/api/tables/:id", async (req, res) => {
+    const { id } = req.params;
+
+    // Delete all requests associated with this table first
+    await db.delete(requests).where(eq(requests.tableId, Number(id)));
+
+    // Then delete the table
+    const [deletedTable] = await db.delete(tables)
+      .where(eq(tables.id, Number(id)))
+      .returning();
+
+    if (!deletedTable) {
+      return res.status(404).json({ message: "Table not found" });
+    }
+
+    // Notify connected clients about the deletion
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "delete_table", tableId: id }));
+      }
+    });
+
+    res.json(deletedTable);
+  });
+
   app.post("/api/tables", async (req, res) => {
     const { name } = req.body;
 
@@ -71,7 +96,7 @@ export function registerRoutes(app: Express): Server {
     res.json(updatedTable);
   });
 
-  // Request routes
+  // Request routes remain unchanged
   app.get("/api/requests", async (req, res) => {
     const { tableId } = req.query;
     const query = tableId
