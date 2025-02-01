@@ -3,16 +3,28 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { GlassWater, Bell, Receipt, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Request } from "@db/schema";
 
 export default function TablePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const tableId = Number(new URLSearchParams(window.location.search).get("id"));
+  const [otherRequestNote, setOtherRequestNote] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   useEffect(() => {
     wsService.connect();
@@ -36,6 +48,8 @@ export default function TablePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+      setOtherRequestNote("");
+      setIsDialogOpen(false);
       toast({
         title: "Request sent",
         description: "Staff has been notified of your request.",
@@ -52,6 +66,18 @@ export default function TablePage() {
   });
 
   if (!tableId || isNaN(tableId)) return <div>Invalid table ID</div>;
+
+  const handleOtherRequest = () => {
+    if (!otherRequestNote.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a message for your request.",
+        variant: "destructive",
+      });
+      return;
+    }
+    createRequest({ type: "other", notes: otherRequestNote });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -87,15 +113,37 @@ export default function TablePage() {
               <Receipt className="h-8 w-8" />
               <span>Get Check</span>
             </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-24 flex flex-col items-center justify-center space-y-2"
-              onClick={() => createRequest({ type: "other" })}
-            >
-              <Clock className="h-8 w-8" />
-              <span>Other Request</span>
-            </Button>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="h-24 flex flex-col items-center justify-center space-y-2"
+                >
+                  <Clock className="h-8 w-8" />
+                  <span>Other Request</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Other Request</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="message">Your Request</Label>
+                    <Input
+                      id="message"
+                      placeholder="Type your request here..."
+                      value={otherRequestNote}
+                      onChange={(e) => setOtherRequestNote(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={handleOtherRequest}>Send Request</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           {requests.length > 0 && (
@@ -111,6 +159,9 @@ export default function TablePage() {
                     .map((request) => (
                       <div key={request.id} className="p-4 bg-white rounded-lg shadow">
                         <div className="font-medium">{request.type}</div>
+                        {request.notes && (
+                          <div className="text-sm text-gray-600 mt-1">{request.notes}</div>
+                        )}
                         <div className="text-sm text-gray-500">Status: {request.status}</div>
                       </div>
                     ))}
@@ -123,6 +174,9 @@ export default function TablePage() {
                     .map((request) => (
                       <div key={request.id} className="p-4 bg-white rounded-lg shadow">
                         <div className="font-medium">{request.type}</div>
+                        {request.notes && (
+                          <div className="text-sm text-gray-600 mt-1">{request.notes}</div>
+                        )}
                         <div className="text-sm text-gray-500">Completed</div>
                       </div>
                     ))}
