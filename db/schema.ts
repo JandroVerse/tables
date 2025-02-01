@@ -21,7 +21,7 @@ export const requests = pgTable("requests", {
   tableId: integer("table_id").references(() => tables.id).notNull(),
   sessionId: text("session_id").notNull(),
   type: text("type", { enum: ["waiter", "water", "check", "other"] }).notNull(),
-  status: text("status", { enum: ["pending", "in_progress", "completed"] }).default("pending").notNull(),
+  status: text("status", { enum: ["pending", "in_progress", "completed", "cleared"] }).default("pending").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),

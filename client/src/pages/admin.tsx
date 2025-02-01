@@ -59,6 +59,19 @@ export default function AdminPage() {
     },
   });
 
+  const { mutate: clearRequest } = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
+    },
+    onSuccess: () => {
+      refetch();
+      toast({
+        title: "Request cleared",
+        description: "The request has been cleared from the queue.",
+      });
+    },
+  });
+
   // Helper function to get table name
   const getTableName = (tableId: number) => {
     const table = tables.find(t => t.id === tableId);
@@ -137,21 +150,31 @@ export default function AdminPage() {
                               {new Date(request.createdAt).toLocaleTimeString()}
                             </p>
                           </div>
-                          {status !== "completed" && (
-                            <Button
-                              onClick={() =>
-                                updateRequest({
-                                  id: request.id,
-                                  status:
-                                    status === "pending"
-                                      ? "in_progress"
-                                      : "completed",
-                                })
-                              }
-                            >
-                              {status === "pending" ? "Start" : "Complete"}
-                            </Button>
-                          )}
+                          <div className="flex gap-2">
+                            {status !== "completed" && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => clearRequest(request.id)}
+                                >
+                                  Clear
+                                </Button>
+                                <Button
+                                  onClick={() =>
+                                    updateRequest({
+                                      id: request.id,
+                                      status:
+                                        status === "pending"
+                                          ? "in_progress"
+                                          : "completed",
+                                    })
+                                  }
+                                >
+                                  {status === "pending" ? "Start" : "Complete"}
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </CardContent>
                       </Card>
                     ))}
