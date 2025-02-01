@@ -10,6 +10,17 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GlassWater, Bell, Receipt, Clock } from "lucide-react";
@@ -73,11 +84,11 @@ export default function TablePage() {
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
       if (!sessionId) throw new Error('No active session');
-      const response = await apiRequest("POST", "/api/requests", { 
-        tableId, 
-        type, 
+      const response = await apiRequest("POST", "/api/requests", {
+        tableId,
+        type,
         notes,
-        sessionId 
+        sessionId
       });
       return response.json();
     },
@@ -100,6 +111,28 @@ export default function TablePage() {
     },
   });
 
+
+  const { mutate: cancelRequest } = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+      toast({
+        title: "Request cancelled",
+        description: "Your request has been cancelled successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to cancel request. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Failed to cancel request:", error);
+    },
+  });
+
   if (!tableId || isNaN(tableId)) return <div>Invalid table ID</div>;
   if (!sessionId) return <div>Initializing table session...</div>;
 
@@ -119,8 +152,8 @@ export default function TablePage() {
       return;
     }
     if (hasActiveRequest("other") && requests.some(
-      (r) => r.type === "other" && 
-            r.notes === otherRequestNote && 
+      (r) => r.type === "other" &&
+            r.notes === otherRequestNote &&
             r.status !== "completed"
     )) {
       toast({
@@ -229,8 +262,35 @@ export default function TablePage() {
                           {request.notes && (
                             <div className="text-sm text-gray-600 mt-2">{request.notes}</div>
                           )}
-                          <div className="text-sm text-gray-500 mt-2">
-                            Status: <span className="capitalize">{request.status.replace('_', ' ')}</span>
+                          <div className="flex justify-between items-center mt-2">
+                            <div className="text-sm text-gray-500">
+                              Status: <span className="capitalize">{request.status.replace('_', ' ')}</span>
+                            </div>
+                            {request.status === "pending" && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    Cancel Request
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Cancel Request?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to cancel this request? This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>No, keep it</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => cancelRequest(request.id)}
+                                    >
+                                      Yes, cancel it
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
