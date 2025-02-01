@@ -40,14 +40,24 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/tables", async (req, res) => {
     const { name } = req.body;
-    const qrCode = await QRCode.toString(
+
+    // Generate unique QR code for this table
+    const qrCodeSvg = await QRCode.toString(
       `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table?id=${name}`,
-      { type: "svg" }
+      { 
+        type: 'svg',
+        width: 256,
+        margin: 4,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      }
     );
 
     const [table] = await db.insert(tables).values({
       name,
-      qrCode,
+      qrCode: qrCodeSvg,
     }).returning();
 
     res.json(table);

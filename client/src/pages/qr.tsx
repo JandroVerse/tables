@@ -10,11 +10,14 @@ export default function QRPage() {
 
   const downloadQR = (tableId: number, qrCode: string) => {
     const link = document.createElement("a");
-    link.href = qrCode;
+    const blob = new Blob([qrCode], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    link.href = url;
     link.download = `table-${tableId}-qr.svg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -26,13 +29,12 @@ export default function QRPage() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {tables.map((table) => (
-              <Card key={table.id}>
+              <Card key={table.id} className="overflow-hidden">
                 <CardContent className="p-4">
                   <h3 className="font-medium mb-2">{table.name}</h3>
-                  <img
-                    src={table.qrCode}
-                    alt={`QR code for ${table.name}`}
+                  <div 
                     className="w-full mb-4"
+                    dangerouslySetInnerHTML={{ __html: table.qrCode }}
                   />
                   <Button
                     className="w-full"
