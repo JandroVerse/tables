@@ -18,14 +18,30 @@ export const requests = pgTable("requests", {
   completedAt: timestamp("completed_at"),
 });
 
+export const feedback = pgTable("feedback", {
+  id: serial("id").primaryKey(),
+  requestId: integer("request_id").references(() => requests.id).notNull(),
+  rating: integer("rating").notNull(), // 1-5 rating
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const tableRelations = relations(tables, ({ many }) => ({
   requests: many(requests),
 }));
 
-export const requestRelations = relations(requests, ({ one }) => ({
+export const requestRelations = relations(requests, ({ one, many }) => ({
   table: one(tables, {
     fields: [requests.tableId],
     references: [tables.id],
+  }),
+  feedback: many(feedback),
+}));
+
+export const feedbackRelations = relations(feedback, ({ one }) => ({
+  request: one(requests, {
+    fields: [feedback.requestId],
+    references: [requests.id],
   }),
 }));
 
@@ -33,6 +49,9 @@ export const insertTableSchema = createInsertSchema(tables);
 export const selectTableSchema = createSelectSchema(tables);
 export const insertRequestSchema = createInsertSchema(requests);
 export const selectRequestSchema = createSelectSchema(requests);
+export const insertFeedbackSchema = createInsertSchema(feedback);
+export const selectFeedbackSchema = createSelectSchema(feedback);
 
 export type Table = typeof tables.$inferSelect;
 export type Request = typeof requests.$inferSelect;
+export type Feedback = typeof feedback.$inferSelect;

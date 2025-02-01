@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
-import { tables, requests } from "@db/schema";
+import { tables, requests, feedback } from "@db/schema";
 import { eq } from "drizzle-orm";
 import QRCode from "qrcode";
 
@@ -11,7 +11,6 @@ export function registerRoutes(app: Express): Server {
   const wss = new WebSocketServer({ 
     server: httpServer,
     verifyClient: ({ req }) => {
-      // Ignore Vite HMR WebSocket connections
       if (req.headers['sec-websocket-protocol'] === 'vite-hmr') {
         return false;
       }
@@ -23,7 +22,6 @@ export function registerRoutes(app: Express): Server {
   wss.on("connection", (ws: WebSocket) => {
     console.log("New WebSocket connection");
     ws.on("message", (message: string) => {
-      // Broadcast updates to all connected clients
       wss.clients.forEach((client) => {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
           client.send(message);
@@ -40,11 +38,7 @@ export function registerRoutes(app: Express): Server {
 
   app.delete("/api/tables/:id", async (req, res) => {
     const { id } = req.params;
-
-    // Delete all requests associated with this table first
     await db.delete(requests).where(eq(requests.tableId, Number(id)));
-
-    // Then delete the table
     const [deletedTable] = await db.delete(tables)
       .where(eq(tables.id, Number(id)))
       .returning();
@@ -53,7 +47,6 @@ export function registerRoutes(app: Express): Server {
       return res.status(404).json({ message: "Table not found" });
     }
 
-    // Notify connected clients about the deletion
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({ type: "delete_table", tableId: id }));
@@ -65,14 +58,11 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/tables", async (req, res) => {
     const { name } = req.body;
-
-    // First create the table to get its ID
     const [table] = await db.insert(tables).values({
       name,
-      qrCode: '', // Temporary empty value
+      qrCode: '',
     }).returning();
 
-    // Generate QR code with the actual table ID
     const qrCodeSvg = await QRCode.toString(
       `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table?id=${table.id}`,
       { 
@@ -86,7 +76,6 @@ export function registerRoutes(app: Express): Server {
       }
     );
 
-    // Update the table with the generated QR code
     const [updatedTable] = await db
       .update(tables)
       .set({ qrCode: qrCodeSvg })
@@ -96,7 +85,7 @@ export function registerRoutes(app: Express): Server {
     res.json(updatedTable);
   });
 
-  // Request routes remain unchanged
+  // Request routes
   app.get("/api/requests", async (req, res) => {
     const { tableId } = req.query;
     const query = tableId
@@ -116,7 +105,6 @@ export function registerRoutes(app: Express): Server {
       notes,
     }).returning();
 
-    // Notify connected clients
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({ type: "new_request", request }));
@@ -139,7 +127,6 @@ export function registerRoutes(app: Express): Server {
       .where(eq(requests.id, Number(id)))
       .returning();
 
-    // Notify connected clients
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({ type: "update_request", request }));
@@ -147,6 +134,67 @@ export function registerRoutes(app: Express): Server {
     });
 
     res.json(request);
+  });
+
+  // Feedback routes
+  app.post("/api/feedback", async (req, res) => {
+    const { requestId, rating, comment } = req.body;
+
+    // Check if the request exists and is completed
+    const request = await db.query.requests.findFirst({
+      where: eq(requests.id, requestId),
+    });
+
+    if (!request) {
+      return res.status(404).json({ message: "Request not found" });
+    }
+
+    if (request.status !== "completed") {
+      return res.status(400).json({ 
+        message: "Can only provide feedback for completed requests" 
+      });
+    }
+
+    // Check if feedback already exists
+    const existingFeedback = await db.query.feedback.findFirst({
+      where: eq(feedback.requestId, requestId),
+    });
+
+    if (existingFeedback) {
+      return res.status(400).json({ 
+        message: "Feedback already submitted for this request" 
+      });
+    }
+
+    const [newFeedback] = await db.insert(feedback)
+      .values({
+        requestId,
+        rating,
+        comment,
+      })
+      .returning();
+
+    // Notify connected clients about new feedback
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ 
+          type: "new_feedback", 
+          feedback: newFeedback 
+        }));
+      }
+    });
+
+    res.json(newFeedback);
+  });
+
+  app.get("/api/feedback", async (req, res) => {
+    const { requestId } = req.query;
+    const query = requestId
+      ? { where: eq(feedback.requestId, Number(requestId)) }
+      : undefined;
+
+    const allFeedback = await db.query.feedback.findMany(query);
+    res.json(allFeedback);
   });
 
   return httpServer;

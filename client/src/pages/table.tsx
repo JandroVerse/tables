@@ -18,6 +18,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect, useState } from "react";
 import type { Request } from "@db/schema";
+import { FeedbackDialog } from "@/components/feedback-dialog";
 
 export default function TablePage() {
   const { toast } = useToast();
@@ -25,6 +26,7 @@ export default function TablePage() {
   const tableId = Number(new URLSearchParams(window.location.search).get("id"));
   const [otherRequestNote, setOtherRequestNote] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
 
   useEffect(() => {
     wsService.connect();
@@ -204,12 +206,29 @@ export default function TablePage() {
                         {request.notes && (
                           <div className="text-sm text-gray-600 mt-1">{request.notes}</div>
                         )}
-                        <div className="text-sm text-gray-500">Completed</div>
+                        <div className="flex justify-between items-center mt-2">
+                          <div className="text-sm text-gray-500">Completed</div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setFeedbackRequest(request)}
+                          >
+                            Rate Service
+                          </Button>
+                        </div>
                       </div>
                     ))}
                 </div>
               </TabsContent>
             </Tabs>
+          )}
+
+          {feedbackRequest && (
+            <FeedbackDialog
+              request={feedbackRequest}
+              open={true}
+              onClose={() => setFeedbackRequest(null)}
+            />
           )}
         </CardContent>
       </Card>
