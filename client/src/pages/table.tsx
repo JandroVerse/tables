@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GlassWater, Bell, Receipt, Clock } from "lucide-react";
+import { Plus, Minus, GlassWater, Bell, Receipt, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect, useState } from "react";
@@ -57,6 +57,8 @@ export default function TablePage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isWaterDialogOpen, setIsWaterDialogOpen] = useState(false);
+  const [waterCount, setWaterCount] = useState(1);
 
   useEffect(() => {
     if (tableId && !isNaN(tableId)) {
@@ -160,7 +162,7 @@ export default function TablePage() {
     );
   };
 
-  const handleOtherRequest = () => {
+    const handleOtherRequest = () => {
     if (!otherRequestNote.trim()) {
       toast({
         title: "Error",
@@ -169,7 +171,7 @@ export default function TablePage() {
       });
       return;
     }
-    if (hasActiveRequest("other") && requests.some(
+     if (hasActiveRequest("other") && requests.some(
       (r) => r.type === "other" &&
             r.notes === otherRequestNote &&
             r.status !== "completed"
@@ -199,13 +201,26 @@ export default function TablePage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
-              {[
-                { icon: Bell, label: "Call Waiter", type: "waiter" },
-                { icon: GlassWater, label: "Water Refill", type: "water" },
-                { icon: Receipt, label: "Get Check", type: "check" },
-              ].map(({ icon: Icon, label, type }) => (
+              <motion.div
+                variants={buttonVariants}
+                initial="idle"
+                whileHover="hover"
+                whileTap="tap"
+              >
+                <Button
+                  size="lg"
+                  className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                  onClick={() => createRequest({ type: "waiter" })}
+                  disabled={hasActiveRequest("waiter")}
+                  title={hasActiveRequest("waiter") ? "Waiter request is being processed" : ""}
+                >
+                  <Bell className="h-8 w-8" />
+                  <span className="font-medium">Call Waiter</span>
+                </Button>
+              </motion.div>
+
+              <Dialog open={isWaterDialogOpen} onOpenChange={setIsWaterDialogOpen}>
                 <motion.div
-                  key={type}
                   variants={buttonVariants}
                   initial="idle"
                   whileHover="hover"
@@ -214,15 +229,75 @@ export default function TablePage() {
                   <Button
                     size="lg"
                     className="h-28 w-full flex flex-col items-center justify-center space-y-3"
-                    onClick={() => createRequest({ type })}
-                    disabled={hasActiveRequest(type)}
-                    title={hasActiveRequest(type) ? `${label} request is being processed` : ""}
+                    onClick={() => setIsWaterDialogOpen(true)}
+                    disabled={hasActiveRequest("water")}
+                    title={hasActiveRequest("water") ? "Water refill request is being processed" : ""}
                   >
-                    <Icon className="h-8 w-8" />
-                    <span className="font-medium">{label}</span>
+                    <GlassWater className="h-8 w-8" />
+                    <span className="font-medium">Water Refill</span>
                   </Button>
                 </motion.div>
-              ))}
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>How many waters would you like?</DialogTitle>
+                  </DialogHeader>
+                  <div className="py-6">
+                    <div className="flex items-center justify-center gap-4">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setWaterCount(Math.max(1, waterCount - 1))}
+                        className="h-8 w-8"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <span className="text-2xl font-semibold w-12 text-center">
+                        {waterCount}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setWaterCount(Math.min(10, waterCount + 1))}
+                        className="h-8 w-8"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      onClick={() => {
+                        createRequest({
+                          type: "water",
+                          notes: `${waterCount} water${waterCount > 1 ? 's' : ''}`
+                        });
+                        setIsWaterDialogOpen(false);
+                        setWaterCount(1);
+                      }}
+                    >
+                      Confirm
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <motion.div
+                variants={buttonVariants}
+                initial="idle"
+                whileHover="hover"
+                whileTap="tap"
+              >
+                <Button
+                  size="lg"
+                  className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                  onClick={() => createRequest({ type: "check" })}
+                  disabled={hasActiveRequest("check")}
+                  title={hasActiveRequest("check") ? "Check request is being processed" : ""}
+                >
+                  <Receipt className="h-8 w-8" />
+                  <span className="font-medium">Get Check</span>
+                </Button>
+              </motion.div>
 
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <motion.div
