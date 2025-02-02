@@ -43,19 +43,29 @@ interface DraggableTableProps {
 
 const ResizeHandle = ({ className, onDrag }: { className: string; onDrag: (delta: { x: number; y: number }) => void }) => {
   return (
-    <Draggable
-      position={{ x: 0, y: 0 }}
-      onDrag={(e, data) => {
-        onDrag({ x: data.deltaX, y: data.deltaY });
-        return false;
+    <div 
+      className={`absolute w-3 h-3 bg-primary hover:bg-primary/80 active:scale-110 transition-all cursor-nwse-resize rounded-full ${className}`}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startY = e.clientY;
+
+        const handleMouseMove = (e: MouseEvent) => {
+          onDrag({
+            x: e.clientX - startX,
+            y: e.clientY - startY,
+          });
+        };
+
+        const handleMouseUp = () => {
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
       }}
-      bounds={{
-        left: 0,
-        top: 0,
-      }}
-    >
-      <div className={`absolute w-3 h-3 bg-primary rounded-full cursor-nwse-resize ${className}`} />
-    </Draggable>
+    />
   );
 };
 
@@ -73,6 +83,8 @@ const DraggableTable = ({
 
     let newWidth = table.position.width;
     let newHeight = table.position.height;
+    let newX = table.position.x;
+    let newY = table.position.y;
 
     switch (handle) {
       case 'se':
@@ -82,18 +94,23 @@ const DraggableTable = ({
       case 'sw':
         newWidth = Math.max(60, table.position.width - delta.x);
         newHeight = Math.max(60, table.position.height + delta.y);
+        newX = table.position.x + delta.x;
         break;
       case 'ne':
         newWidth = Math.max(60, table.position.width + delta.x);
         newHeight = Math.max(60, table.position.height - delta.y);
+        newY = table.position.y + delta.y;
         break;
       case 'nw':
         newWidth = Math.max(60, table.position.width - delta.x);
         newHeight = Math.max(60, table.position.height - delta.y);
+        newX = table.position.x + delta.x;
+        newY = table.position.y + delta.y;
         break;
     }
 
     onResize(table.id, { width: newWidth, height: newHeight });
+    onDragStop(table.id, { x: newX, y: newY });
   };
 
   return (
@@ -102,6 +119,7 @@ const DraggableTable = ({
       onStop={(_e, data) => onDragStop(table.id, { x: data.x, y: data.y })}
       bounds="parent"
       grid={[20, 20]}
+      disabled={!editMode}
     >
       <div
         className={`absolute cursor-move select-none ${
