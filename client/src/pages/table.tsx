@@ -207,16 +207,35 @@ export default function TablePage() {
                 whileHover="hover"
                 whileTap="tap"
               >
-                <Button
-                  size="lg"
-                  className="h-28 w-full flex flex-col items-center justify-center space-y-3"
-                  onClick={() => createRequest({ type: "waiter" })}
-                  disabled={hasActiveRequest("waiter")}
-                  title={hasActiveRequest("waiter") ? "Waiter request is being processed" : ""}
-                >
-                  <Bell className="h-8 w-8" />
-                  <span className="font-medium">Call Waiter</span>
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="lg"
+                      className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                      disabled={hasActiveRequest("waiter")}
+                      title={hasActiveRequest("waiter") ? "Waiter request is being processed" : ""}
+                    >
+                      <Bell className="h-8 w-8" />
+                      <span className="font-medium">Call Waiter</span>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Call Waiter</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Would you like to call a waiter to your table?
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => createRequest({ type: "waiter" })}
+                      >
+                        Yes, Call Waiter
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </motion.div>
 
               <Dialog open={isWaterDialogOpen} onOpenChange={setIsWaterDialogOpen}>
@@ -287,16 +306,35 @@ export default function TablePage() {
                 whileHover="hover"
                 whileTap="tap"
               >
-                <Button
-                  size="lg"
-                  className="h-28 w-full flex flex-col items-center justify-center space-y-3"
-                  onClick={() => createRequest({ type: "check" })}
-                  disabled={hasActiveRequest("check")}
-                  title={hasActiveRequest("check") ? "Check request is being processed" : ""}
-                >
-                  <Receipt className="h-8 w-8" />
-                  <span className="font-medium">Get Check</span>
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="lg"
+                      className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                      disabled={hasActiveRequest("check")}
+                      title={hasActiveRequest("check") ? "Check request is being processed" : ""}
+                    >
+                      <Receipt className="h-8 w-8" />
+                      <span className="font-medium">Get Check</span>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Request Check</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Would you like to request the check for your table?
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => createRequest({ type: "check" })}
+                      >
+                        Yes, Get Check
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </motion.div>
 
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
