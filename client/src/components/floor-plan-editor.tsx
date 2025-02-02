@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Draggable from "react-draggable";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -11,8 +11,10 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Input } from "./ui/input";
+import { GlassWater, Bell, Receipt, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import type { Table } from "@db/schema";
+import type { Table, Request } from "@db/schema";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface TablePosition {
   x: number;
@@ -31,13 +33,35 @@ interface DraggableTableProps {
   onDragStop: (tableId: number, position: { x: number; y: number }) => void;
   selected: boolean;
   onClick: () => void;
+  activeRequests: Request[];
 }
+
+const RequestIndicator = ({ type }: { type: string }) => {
+  const icons = {
+    water: <GlassWater className="h-5 w-5 text-blue-500" />,
+    waiter: <Bell className="h-5 w-5 text-purple-500" />,
+    check: <Receipt className="h-5 w-5 text-emerald-500" />,
+    other: <Clock className="h-5 w-5 text-gray-500" />
+  };
+
+  return (
+    <motion.div
+      initial={{ scale: 0 }}
+      animate={{ scale: 1 }}
+      exit={{ scale: 0 }}
+      className="absolute -top-6 bg-white rounded-full p-1 shadow-lg"
+    >
+      {icons[type as keyof typeof icons]}
+    </motion.div>
+  );
+};
 
 const DraggableTable = ({
   table,
   onDragStop,
   selected,
   onClick,
+  activeRequests,
 }: DraggableTableProps) => {
   return (
     <Draggable
@@ -64,6 +88,15 @@ const DraggableTable = ({
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-medium text-gray-800">{table.name}</span>
         </div>
+        <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 flex gap-2">
+          <AnimatePresence>
+            {activeRequests.map((request, index) => (
+              <div key={request.id} style={{ transform: `translateX(${index * 24}px)` }}>
+                <RequestIndicator type={request.type} />
+              </div>
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
     </Draggable>
   );
@@ -78,6 +111,10 @@ export function FloorPlanEditor() {
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
     queryKey: ["/api/tables"],
+  });
+
+  const { data: requests = [] } = useQuery<Request[]>({
+    queryKey: ["/api/requests"],
   });
 
   const { mutate: updateTablePosition } = useMutation({
@@ -126,6 +163,14 @@ export function FloorPlanEditor() {
     createTable({ name: newTableName, position });
   };
 
+  const getActiveRequests = (tableId: number) => {
+    return requests.filter(
+      (r) => r.tableId === tableId && 
+      r.status !== "completed" && 
+      r.status !== "cleared"
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -166,6 +211,7 @@ export function FloorPlanEditor() {
                 onDragStop={handleTableDragStop}
                 selected={selectedTable === table.id}
                 onClick={() => setSelectedTable(table.id)}
+                activeRequests={getActiveRequests(table.id)}
               />
             ))}
           </div>
