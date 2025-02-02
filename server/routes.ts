@@ -115,17 +115,37 @@ export function registerRoutes(app: Express): Server {
     const { id } = req.params;
     const { position } = req.body;
 
-    const [updatedTable] = await db
-      .update(tables)
-      .set({ position })
-      .where(eq(tables.id, Number(id)))
-      .returning();
-
-    if (!updatedTable) {
-      return res.status(404).json({ message: "Table not found" });
+    // Validate the position object
+    if (!position || typeof position !== 'object') {
+      return res.status(400).json({ message: "Invalid position data" });
     }
 
-    res.json(updatedTable);
+    try {
+      const [updatedTable] = await db
+        .update(tables)
+        .set({ position })
+        .where(eq(tables.id, Number(id)))
+        .returning();
+
+      if (!updatedTable) {
+        return res.status(404).json({ message: "Table not found" });
+      }
+
+      // Broadcast the update to all connected clients
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ 
+            type: "update_table", 
+            table: updatedTable 
+          }));
+        }
+      });
+
+      res.json(updatedTable);
+    } catch (error) {
+      console.error('Error updating table:', error);
+      res.status(500).json({ message: "Failed to update table position" });
+    }
   });
 
   // Request routes

@@ -158,8 +158,19 @@ const DraggableTable = ({
         break;
     }
 
+    // Update both local state and send to server
     setCurrentSize({ width: newWidth, height: newHeight });
     setPosition({ x: newX, y: newY });
+
+    // Send the complete position object to maintain consistency
+    const newPosition = {
+      x: newX,
+      y: newY,
+      width: newWidth,
+      height: newHeight,
+      shape: table.position.shape,
+    };
+
     onResize(table.id, { width: newWidth, height: newHeight });
     onDragStop(table.id, { x: newX, y: newY });
   };
