@@ -188,9 +188,9 @@ export default function AdminPage() {
                           >
                             <Card className={`${
                               request.type === "waiter" 
-                                ? "bg-purple-50/70" 
+                                ? "bg-purple-100" 
                                 : request.type === "water"
-                                ? "bg-blue-50/70"
+                                ? "bg-blue-100"
                                 : request.type === "check"
                                 ? "bg-emerald-100/70"
                                 : ""
