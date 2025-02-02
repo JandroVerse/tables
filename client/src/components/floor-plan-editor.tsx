@@ -49,7 +49,7 @@ const RequestIndicator = ({ type }: { type: string }) => {
       initial={{ scale: 0 }}
       animate={{ scale: 1 }}
       exit={{ scale: 0 }}
-      className="absolute -top-6 bg-white rounded-full p-1 shadow-lg"
+      className="bg-white rounded-full p-1 shadow-lg"
     >
       {icons[type as keyof typeof icons]}
     </motion.div>
@@ -88,14 +88,14 @@ const DraggableTable = ({
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-medium text-gray-800">{table.name}</span>
         </div>
-        <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 flex gap-2">
-          <AnimatePresence>
-            {activeRequests.map((request, index) => (
-              <div key={request.id} style={{ transform: `translateX(${index * 24}px)` }}>
-                <RequestIndicator type={request.type} />
-              </div>
-            ))}
-          </AnimatePresence>
+        <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
+          <div className="flex gap-2">
+            <AnimatePresence>
+              {activeRequests.map((request) => (
+                <RequestIndicator key={request.id} type={request.type} />
+              ))}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </Draggable>
