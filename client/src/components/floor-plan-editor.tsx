@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Draggable from "react-draggable";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -31,7 +31,6 @@ interface DraggableTableProps {
   onDragStop: (tableId: number, position: { x: number; y: number }) => void;
   selected: boolean;
   onClick: () => void;
-  requestCount?: number;
 }
 
 const DraggableTable = ({
@@ -39,10 +38,7 @@ const DraggableTable = ({
   onDragStop,
   selected,
   onClick,
-  requestCount = 0,
 }: DraggableTableProps) => {
-  const intensity = Math.min(0.8, Math.max(0.1, requestCount / 10));
-
   return (
     <Draggable
       position={{ x: table.position.x, y: table.position.y }}
@@ -55,11 +51,10 @@ const DraggableTable = ({
           table.position.shape === "round" ? "rounded-full" : "rounded-lg"
         } ${
           selected ? "ring-2 ring-primary" : ""
-        }`}
+        } bg-green-300 hover:bg-green-400 transition-colors`}
         style={{
           width: table.position.width,
           height: table.position.height,
-          backgroundColor: `rgba(52, 211, 153, ${intensity})`,
         }}
         onClick={(e) => {
           e.stopPropagation();
@@ -83,10 +78,6 @@ export function FloorPlanEditor() {
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
     queryKey: ["/api/tables"],
-  });
-
-  const { data: heatMapData = [] } = useQuery<Array<{ table_id: number; request_count: number }>>({
-    queryKey: ["/api/tables/heat-map"],
   });
 
   const { mutate: updateTablePosition } = useMutation({
@@ -135,11 +126,6 @@ export function FloorPlanEditor() {
     createTable({ name: newTableName, position });
   };
 
-  const getRequestCount = (tableId: number) => {
-    const data = heatMapData.find((d) => d.table_id === tableId);
-    return data?.request_count || 0;
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -180,7 +166,6 @@ export function FloorPlanEditor() {
                 onDragStop={handleTableDragStop}
                 selected={selectedTable === table.id}
                 onClick={() => setSelectedTable(table.id)}
-                requestCount={getRequestCount(table.id)}
               />
             ))}
           </div>

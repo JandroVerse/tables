@@ -6,7 +6,6 @@ import { tables, requests, feedback, tableSessions } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
-import { sql } from "drizzle-orm";
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
@@ -112,23 +111,22 @@ export function registerRoutes(app: Express): Server {
     res.json(updatedTable);
   });
 
-    // Add new route for updating table position
-    app.patch("/api/tables/:id", async (req, res) => {
-      const { id } = req.params;
-      const { position } = req.body;
+  app.patch("/api/tables/:id", async (req, res) => {
+    const { id } = req.params;
+    const { position } = req.body;
 
-      const [updatedTable] = await db
-        .update(tables)
-        .set({ position })
-        .where(eq(tables.id, Number(id)))
-        .returning();
+    const [updatedTable] = await db
+      .update(tables)
+      .set({ position })
+      .where(eq(tables.id, Number(id)))
+      .returning();
 
-      if (!updatedTable) {
-        return res.status(404).json({ message: "Table not found" });
-      }
+    if (!updatedTable) {
+      return res.status(404).json({ message: "Table not found" });
+    }
 
-      res.json(updatedTable);
-    });
+    res.json(updatedTable);
+  });
 
   // Request routes
   app.get("/api/requests", async (req, res) => {
@@ -191,7 +189,7 @@ export function registerRoutes(app: Express): Server {
     res.json(request);
   });
 
-  // Feedback routes remain unchanged
+  // Feedback routes
   app.post("/api/feedback", async (req, res) => {
     const { requestId, rating, comment } = req.body;
 
@@ -247,30 +245,6 @@ export function registerRoutes(app: Express): Server {
 
     const allFeedback = await db.query.feedback.findMany(query);
     res.json(allFeedback);
-  });
-
-  // Add new route for table request frequencies
-  app.get("/api/tables/heat-map", async (req, res) => {
-    const hours = Number(req.query.hours) || 24;
-    const startTime = new Date(Date.now() - hours * 60 * 60 * 1000);
-
-    const frequencies = await db.execute(sql`
-      SELECT 
-        t.id as table_id,
-        t.name as table_name,
-        COUNT(r.id) as request_count,
-        json_agg(json_build_object(
-          'type', r.type,
-          'created_at', r.created_at
-        )) as requests
-      FROM ${tables} t
-      LEFT JOIN ${requests} r ON t.id = r.table_id
-      WHERE r.created_at >= ${startTime.toISOString()}
-      GROUP BY t.id, t.name
-      ORDER BY request_count DESC
-    `);
-
-    res.json(frequencies.rows);
   });
 
   return httpServer;

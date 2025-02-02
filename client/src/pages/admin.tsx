@@ -21,7 +21,6 @@ import { Link } from "wouter";
 import type { Request, Table } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
-import { TableHeatmap } from "@/components/table-heatmap";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
 
 const cardVariants = {
@@ -143,8 +142,6 @@ export default function AdminPage() {
         </div>
 
         <FloorPlanEditor />
-
-        <TableHeatmap />
 
         <Card>
           <CardHeader>
