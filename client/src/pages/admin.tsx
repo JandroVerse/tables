@@ -22,7 +22,6 @@ import type { Request, Table } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
-import { AnimatedBackground } from "@/components/animated-background";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -126,10 +125,9 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background relative">
-      <AnimatedBackground />
+    <div className="min-h-screen bg-background">
       <motion.div
-        className="max-w-[1600px] mx-auto space-y-4 p-4 relative"
+        className="max-w-[1600px] mx-auto space-y-4 p-4"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -192,8 +190,8 @@ export default function AdminPage() {
                             layoutId={`request-${request.id}`}
                           >
                             <Card className={`${
-                              request.type === "waiter" 
-                                ? "bg-purple-200" 
+                              request.type === "waiter"
+                                ? "bg-purple-200"
                                 : request.type === "water"
                                 ? "bg-blue-100"
                                 : request.type === "check"
