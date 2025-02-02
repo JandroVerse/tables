@@ -97,6 +97,14 @@ const DraggableTable = ({
     width: table.position.width, 
     height: table.position.height 
   });
+  const [position, setPosition] = useState({ x: table.position.x, y: table.position.y });
+  const isDragging = useRef(false);
+
+  useEffect(() => {
+    if (!isDragging.current) {
+      setPosition({ x: table.position.x, y: table.position.y });
+    }
+  }, [table.position.x, table.position.y]);
 
   useEffect(() => {
     setCurrentSize({ 
@@ -105,13 +113,27 @@ const DraggableTable = ({
     });
   }, [table.position.width, table.position.height]);
 
+  const handleDrag = (_e: any, data: { x: number; y: number }) => {
+    isDragging.current = true;
+    setPosition({ x: data.x, y: data.y });
+  };
+
+  const handleDragStop = (_e: any, data: { x: number; y: number }) => {
+    isDragging.current = false;
+    // Snap to grid only on drag stop
+    const snappedX = Math.round(data.x / 20) * 20;
+    const snappedY = Math.round(data.y / 20) * 20;
+    setPosition({ x: snappedX, y: snappedY });
+    onDragStop(table.id, { x: snappedX, y: snappedY });
+  };
+
   const handleResize = (handle: 'se' | 'sw' | 'ne' | 'nw', delta: { x: number; y: number }) => {
     if (!editMode) return;
 
     let newWidth = currentSize.width;
     let newHeight = currentSize.height;
-    let newX = table.position.x;
-    let newY = table.position.y;
+    let newX = position.x;
+    let newY = position.y;
 
     switch (handle) {
       case 'se':
@@ -121,32 +143,33 @@ const DraggableTable = ({
       case 'sw':
         newWidth = Math.max(60, currentSize.width - delta.x);
         newHeight = Math.max(60, currentSize.height + delta.y);
-        newX = table.position.x + delta.x;
+        newX = position.x + delta.x;
         break;
       case 'ne':
         newWidth = Math.max(60, currentSize.width + delta.x);
         newHeight = Math.max(60, currentSize.height - delta.y);
-        newY = table.position.y + delta.y;
+        newY = position.y + delta.y;
         break;
       case 'nw':
         newWidth = Math.max(60, currentSize.width - delta.x);
         newHeight = Math.max(60, currentSize.height - delta.y);
-        newX = table.position.x + delta.x;
-        newY = table.position.y + delta.y;
+        newX = position.x + delta.x;
+        newY = position.y + delta.y;
         break;
     }
 
     setCurrentSize({ width: newWidth, height: newHeight });
+    setPosition({ x: newX, y: newY });
     onResize(table.id, { width: newWidth, height: newHeight });
     onDragStop(table.id, { x: newX, y: newY });
   };
 
   return (
     <Draggable
-      position={{ x: table.position.x, y: table.position.y }}
-      onStop={(_e, data) => onDragStop(table.id, { x: data.x, y: data.y })}
+      position={position}
+      onDrag={handleDrag}
+      onStop={handleDragStop}
       bounds="parent"
-      grid={[20, 20]}
       disabled={!editMode}
     >
       <div
