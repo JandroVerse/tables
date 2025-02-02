@@ -12,8 +12,18 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Request, Table } from "@db/schema";
 
+interface TableWithPosition extends Table {
+  position: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    shape: "square" | "round";
+  };
+}
+
 interface QuickRequestPreviewProps {
-  table: Table | null;
+  table: TableWithPosition | null;
   activeRequests: Request[];
   open: boolean;
   onClose: () => void;

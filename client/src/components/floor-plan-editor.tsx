@@ -11,6 +11,8 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
+import { Label } from "./ui/label";
 import { GlassWater, Bell, Receipt, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { Table, Request } from "@db/schema";
@@ -109,6 +111,7 @@ export function FloorPlanEditor() {
   const [newTableName, setNewTableName] = useState("");
   const [selectedShape, setSelectedShape] = useState<"square" | "round">("square");
   const [showRequestPreview, setShowRequestPreview] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
@@ -173,7 +176,14 @@ export function FloorPlanEditor() {
     );
   };
 
-  const selectedTableData = tables.find(t => t.id === selectedTable);
+  const handleTableClick = (tableId: number) => {
+    setSelectedTable(tableId);
+    if (!editMode) {
+      setShowRequestPreview(true);
+    }
+  };
+
+  const selectedTableData = selectedTable ? tables.find(t => t.id === selectedTable) || null : null;
 
   return (
     <Card>
@@ -203,35 +213,45 @@ export function FloorPlanEditor() {
             <Button onClick={handleAddTable}>Add Table</Button>
           </div>
 
-          <div
-            ref={editorRef}
-            className="relative h-[600px] border rounded-lg bg-gray-50"
-            onClick={() => setSelectedTable(null)}
-          >
-            {tables.map((table) => (
-              <DraggableTable
-                key={table.id}
-                table={table}
-                onDragStop={handleTableDragStop}
-                selected={selectedTable === table.id}
-                onClick={() => {
-                  setSelectedTable(table.id);
-                  setShowRequestPreview(true);
-                }}
-                activeRequests={getActiveRequests(table.id)}
+          <div className="relative">
+            <div className="absolute -top-2 right-0 z-10 flex items-center gap-2">
+              <Checkbox 
+                id="edit-mode" 
+                checked={editMode} 
+                onCheckedChange={(checked) => setEditMode(checked as boolean)} 
               />
-            ))}
-          </div>
+              <Label htmlFor="edit-mode" className="font-medium text-sm">
+                Edit Mode
+              </Label>
+            </div>
 
-          <QuickRequestPreview
-            table={selectedTableData}
-            activeRequests={selectedTable ? getActiveRequests(selectedTable) : []}
-            open={showRequestPreview}
-            onClose={() => {
-              setShowRequestPreview(false);
-              setSelectedTable(null);
-            }}
-          />
+            <div
+              ref={editorRef}
+              className="relative h-[600px] border rounded-lg bg-gray-50"
+              onClick={() => setSelectedTable(null)}
+            >
+              {tables.map((table) => (
+                <DraggableTable
+                  key={table.id}
+                  table={table}
+                  onDragStop={handleTableDragStop}
+                  selected={selectedTable === table.id}
+                  onClick={() => handleTableClick(table.id)}
+                  activeRequests={getActiveRequests(table.id)}
+                />
+              ))}
+            </div>
+
+            <QuickRequestPreview
+              table={selectedTableData}
+              activeRequests={selectedTable ? getActiveRequests(selectedTable) : []}
+              open={showRequestPreview}
+              onClose={() => {
+                setShowRequestPreview(false);
+                setSelectedTable(null);
+              }}
+            />
+          </div>
         </div>
       </CardContent>
     </Card>
