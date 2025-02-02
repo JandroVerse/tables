@@ -34,38 +34,68 @@ interface TableWithPosition extends Table {
 interface DraggableTableProps {
   table: TableWithPosition;
   onDragStop: (tableId: number, position: { x: number; y: number }) => void;
+  onResize: (tableId: number, size: { width: number; height: number }) => void;
   selected: boolean;
   onClick: () => void;
   activeRequests: Request[];
+  editMode: boolean;
 }
 
-const RequestIndicator = ({ type }: { type: string }) => {
-  const icons = {
-    water: <GlassWater className="h-5 w-5 text-blue-500" />,
-    waiter: <Bell className="h-5 w-5 text-purple-500" />,
-    check: <Receipt className="h-5 w-5 text-emerald-500" />,
-    other: <Clock className="h-5 w-5 text-gray-500" />
-  };
-
+const ResizeHandle = ({ className, onDrag }: { className: string; onDrag: (delta: { x: number; y: number }) => void }) => {
   return (
-    <motion.div
-      initial={{ scale: 0 }}
-      animate={{ scale: 1 }}
-      exit={{ scale: 0 }}
-      className="bg-white rounded-full p-1 shadow-lg"
+    <Draggable
+      position={{ x: 0, y: 0 }}
+      onDrag={(e, data) => {
+        onDrag({ x: data.deltaX, y: data.deltaY });
+        return false;
+      }}
+      bounds={{
+        left: 0,
+        top: 0,
+      }}
     >
-      {icons[type as keyof typeof icons]}
-    </motion.div>
+      <div className={`absolute w-3 h-3 bg-primary rounded-full cursor-nwse-resize ${className}`} />
+    </Draggable>
   );
 };
 
 const DraggableTable = ({
   table,
   onDragStop,
+  onResize,
   selected,
   onClick,
   activeRequests,
+  editMode,
 }: DraggableTableProps) => {
+  const handleResize = (handle: 'se' | 'sw' | 'ne' | 'nw', delta: { x: number; y: number }) => {
+    if (!editMode) return;
+
+    let newWidth = table.position.width;
+    let newHeight = table.position.height;
+
+    switch (handle) {
+      case 'se':
+        newWidth = Math.max(60, table.position.width + delta.x);
+        newHeight = Math.max(60, table.position.height + delta.y);
+        break;
+      case 'sw':
+        newWidth = Math.max(60, table.position.width - delta.x);
+        newHeight = Math.max(60, table.position.height + delta.y);
+        break;
+      case 'ne':
+        newWidth = Math.max(60, table.position.width + delta.x);
+        newHeight = Math.max(60, table.position.height - delta.y);
+        break;
+      case 'nw':
+        newWidth = Math.max(60, table.position.width - delta.x);
+        newHeight = Math.max(60, table.position.height - delta.y);
+        break;
+    }
+
+    onResize(table.id, { width: newWidth, height: newHeight });
+  };
+
   return (
     <Draggable
       position={{ x: table.position.x, y: table.position.y }}
@@ -95,14 +125,53 @@ const DraggableTable = ({
           <div className="flex gap-2">
             <AnimatePresence>
               {activeRequests.map((request) => (
-                <RequestIndicator key={request.id} type={request.type} />
+                <motion.div
+                  key={request.id}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  className="bg-white rounded-full p-1 shadow-lg"
+                >
+                  <RequestIndicator type={request.type} />
+                </motion.div>
               ))}
             </AnimatePresence>
           </div>
         </div>
+        {editMode && (
+          <>
+            <ResizeHandle
+              className="bottom-0 right-0 -mb-1.5 -mr-1.5"
+              onDrag={(delta) => handleResize('se', delta)}
+            />
+            <ResizeHandle
+              className="bottom-0 left-0 -mb-1.5 -ml-1.5"
+              onDrag={(delta) => handleResize('sw', delta)}
+            />
+            <ResizeHandle
+              className="top-0 right-0 -mt-1.5 -mr-1.5"
+              onDrag={(delta) => handleResize('ne', delta)}
+            />
+            <ResizeHandle
+              className="top-0 left-0 -mt-1.5 -ml-1.5"
+              onDrag={(delta) => handleResize('nw', delta)}
+            />
+          </>
+        )}
       </div>
     </Draggable>
   );
+};
+
+const RequestIndicator = ({ type }: { type: string }) => {
+  const icons = {
+    water: <GlassWater className="h-5 w-5 text-blue-500" />,
+    waiter: <Bell className="h-5 w-5 text-purple-500" />,
+    check: <Receipt className="h-5 w-5 text-emerald-500" />,
+    other: <Clock className="h-5 w-5 text-gray-500" />
+  };
+
+  return icons[type as keyof typeof icons] || icons.other;
 };
 
 export function FloorPlanEditor() {
@@ -149,6 +218,19 @@ export function FloorPlanEditor() {
       ...table.position,
       x,
       y,
+    };
+
+    updateTablePosition({ id: tableId, position });
+  };
+
+  const handleTableResize = (tableId: number, { width, height }: { width: number; height: number }) => {
+    const table = tables.find((t) => t.id === tableId);
+    if (!table) return;
+
+    const position: TablePosition = {
+      ...table.position,
+      width,
+      height,
     };
 
     updateTablePosition({ id: tableId, position });
@@ -234,9 +316,11 @@ export function FloorPlanEditor() {
                   key={table.id}
                   table={table}
                   onDragStop={handleTableDragStop}
+                  onResize={handleTableResize}
                   selected={selectedTable === table.id}
                   onClick={() => handleTableClick(table.id)}
                   activeRequests={getActiveRequests(table.id)}
+                  editMode={editMode}
                 />
               ))}
             </div>
