@@ -296,7 +296,7 @@ export default function TablePage() {
                           >
                             <Card className={`overflow-hidden transition-colors ${
                               request.type === "waiter" 
-                                ? "hover:bg-purple-200 bg-purple-100" 
+                                ? "hover:bg-purple-300 bg-purple-200" 
                                 : request.type === "water"
                                 ? "hover:bg-blue-200 bg-blue-100"
                                 : request.type === "check"
