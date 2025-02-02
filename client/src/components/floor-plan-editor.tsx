@@ -10,11 +10,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import { GlassWater, Bell, Receipt, Clock } from "lucide-react";
+import { GlassWater, Bell, Receipt, Clock, Trash2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Table, Request } from "@db/schema";
 import { motion, AnimatePresence } from "framer-motion";
 import { QuickRequestPreview } from "./quick-request-preview";
@@ -35,6 +47,7 @@ interface DraggableTableProps {
   table: TableWithPosition;
   onDragStop: (tableId: number, position: { x: number; y: number }) => void;
   onResize: (tableId: number, size: { width: number; height: number }) => void;
+  onDelete: (tableId: number) => void;
   selected: boolean;
   onClick: () => void;
   activeRequests: Request[];
@@ -73,6 +86,7 @@ const DraggableTable = ({
   table,
   onDragStop,
   onResize,
+  onDelete,
   selected,
   onClick,
   activeRequests,
@@ -139,6 +153,35 @@ const DraggableTable = ({
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-medium text-gray-800">{table.name}</span>
         </div>
+        {editMode && (
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="icon" className="h-6 w-6">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete {table.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete the
+                    table and all its associated data.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => onDelete(table.id)}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
         <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
           <div className="flex gap-2">
             <AnimatePresence>
@@ -193,6 +236,7 @@ const RequestIndicator = ({ type }: { type: string }) => {
 };
 
 export function FloorPlanEditor() {
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [newTableName, setNewTableName] = useState("");
@@ -225,6 +269,23 @@ export function FloorPlanEditor() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tables"] });
       setNewTableName("");
+      toast({
+        title: "Success",
+        description: "Table created successfully",
+      });
+    },
+  });
+
+  const { mutate: deleteTable } = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/tables/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tables"] });
+      toast({
+        title: "Success",
+        description: "Table deleted successfully",
+      });
     },
   });
 
@@ -335,6 +396,7 @@ export function FloorPlanEditor() {
                   table={table}
                   onDragStop={handleTableDragStop}
                   onResize={handleTableResize}
+                  onDelete={deleteTable}
                   selected={selectedTable === table.id}
                   onClick={() => handleTableClick(table.id)}
                   activeRequests={getActiveRequests(table.id)}
