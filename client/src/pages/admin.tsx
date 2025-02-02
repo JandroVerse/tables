@@ -126,10 +126,10 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-background/95 relative">
+    <div className="min-h-screen bg-background relative">
       <AnimatedBackground />
       <motion.div
-        className="max-w-[1600px] mx-auto space-y-4 p-4"
+        className="max-w-[1600px] mx-auto space-y-4 p-4 relative"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
