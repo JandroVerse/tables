@@ -2,15 +2,15 @@ import { motion } from "framer-motion";
 
 export function AnimatedBackground() {
   return (
-    <div className="fixed inset-0 -z-10 overflow-hidden">
+    <div className="fixed inset-0 z-0">
       {/* Warm ambient lighting effect */}
       <motion.div
-        className="absolute inset-0 opacity-40"
+        className="absolute inset-0 opacity-60"
         animate={{
           background: [
-            "radial-gradient(circle at 20% 20%, rgba(255, 183, 77, 0.2) 0%, rgba(255, 183, 77, 0) 70%)",
-            "radial-gradient(circle at 80% 80%, rgba(255, 183, 77, 0.2) 0%, rgba(255, 183, 77, 0) 70%)",
-            "radial-gradient(circle at 50% 50%, rgba(255, 183, 77, 0.2) 0%, rgba(255, 183, 77, 0) 70%)",
+            "radial-gradient(circle at 20% 20%, rgba(255, 183, 77, 0.3) 0%, rgba(255, 183, 77, 0) 70%)",
+            "radial-gradient(circle at 80% 80%, rgba(255, 183, 77, 0.3) 0%, rgba(255, 183, 77, 0) 70%)",
+            "radial-gradient(circle at 50% 50%, rgba(255, 183, 77, 0.3) 0%, rgba(255, 183, 77, 0) 70%)",
           ],
         }}
         transition={{
@@ -21,7 +21,7 @@ export function AnimatedBackground() {
       />
 
       {/* Restaurant-themed pattern overlay */}
-      <svg className="absolute inset-0 w-full h-full opacity-[0.03]">
+      <svg className="absolute inset-0 w-full h-full opacity-[0.05]">
         <pattern
           id="restaurant-pattern"
           x="0"
@@ -58,14 +58,14 @@ export function AnimatedBackground() {
         {[...Array(30)].map((_, i) => (
           <motion.div
             key={i}
-            className="absolute w-1.5 h-1.5 rounded-full bg-primary/20"
+            className="absolute w-2 h-2 rounded-full bg-primary/30"
             style={{
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,
             }}
             animate={{
               y: [0, -30, 0],
-              opacity: [0, 0.6, 0],
+              opacity: [0, 0.8, 0],
               scale: [1, 1.2, 1],
             }}
             transition={{
@@ -76,9 +76,6 @@ export function AnimatedBackground() {
           />
         ))}
       </div>
-
-      {/* Subtle gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background/50 to-background/95 pointer-events-none" />
     </div>
   );
 }

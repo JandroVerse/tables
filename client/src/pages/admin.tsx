@@ -22,6 +22,7 @@ import type { Request, Table } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
+import { AnimatedBackground } from "@/components/animated-background";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -125,9 +126,12 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
+      <div className="relative z-0">
+        <AnimatedBackground />
+      </div>
       <motion.div
-        className="max-w-[1600px] mx-auto space-y-4 p-4"
+        className="relative z-10 max-w-[1600px] mx-auto space-y-4 p-4"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
