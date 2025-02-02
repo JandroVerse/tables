@@ -130,6 +130,9 @@ const DraggableTable = ({
   const handleResize = (handle: 'se' | 'sw' | 'ne' | 'nw', delta: { x: number; y: number }) => {
     if (!editMode) return;
 
+    const table = tables.find((t) => t.id === selectedTable!);
+    if (!table) return;
+
     let newWidth = currentSize.width;
     let newHeight = currentSize.height;
     let newX = position.x;
@@ -162,8 +165,8 @@ const DraggableTable = ({
     setCurrentSize({ width: newWidth, height: newHeight });
     setPosition({ x: newX, y: newY });
 
-    // Send the complete position object to maintain consistency
-    const newPosition = {
+    // Create a complete position update
+    const updatedPosition = {
       x: newX,
       y: newY,
       width: newWidth,
@@ -171,8 +174,8 @@ const DraggableTable = ({
       shape: table.position.shape,
     };
 
-    onResize(table.id, { width: newWidth, height: newHeight });
-    onDragStop(table.id, { x: newX, y: newY });
+    // Only call updateTablePosition once with complete position data
+    updateTablePosition({ id: table.id, position: updatedPosition });
   };
 
   return (
@@ -341,14 +344,14 @@ export function FloorPlanEditor() {
     const table = tables.find((t) => t.id === tableId);
     if (!table) return;
 
-    // Preserve all existing position properties while updating x,y
-    const position: TablePosition = {
+    // Create a complete position update including existing size and shape
+    const updatedPosition = {
       ...table.position,
       x,
       y,
     };
 
-    updateTablePosition({ id: tableId, position });
+    updateTablePosition({ id: tableId, position: updatedPosition });
   };
 
   const handleTableResize = (tableId: number, { width, height }: { width: number; height: number }) => {
