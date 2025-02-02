@@ -30,6 +30,7 @@ import { useEffect, useState } from "react";
 import type { Request } from "@db/schema";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { motion, AnimatePresence } from "framer-motion";
+import { AnimatedBackground } from "@/components/animated-background";
 
 const cardVariants = {
   initial: { opacity: 0, y: 20 },
@@ -187,11 +188,15 @@ export default function TablePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white p-4">
+    <div className="min-h-screen">
+      <div className="relative z-0">
+        <AnimatedBackground />
+      </div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
+        className="relative z-10 p-4"
       >
         <Card className="max-w-md mx-auto shadow-lg border-0">
           <CardHeader className="pb-4">
