@@ -192,7 +192,7 @@ export default function AdminPage() {
                                 : request.type === "water"
                                 ? "bg-blue-100"
                                 : request.type === "check"
-                                ? "bg-emerald-100/70"
+                                ? "bg-emerald-200"
                                 : ""
                             }`}>
                               <CardContent className="flex items-center justify-between p-4">

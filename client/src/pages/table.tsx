@@ -300,7 +300,7 @@ export default function TablePage() {
                                 : request.type === "water"
                                 ? "hover:bg-blue-200 bg-blue-100"
                                 : request.type === "check"
-                                ? "hover:bg-emerald-200 bg-emerald-100/70"
+                                ? "hover:bg-emerald-300 bg-emerald-200"
                                 : "hover:bg-green-50/50"
                             }`}>
                               <CardContent className="p-4">
