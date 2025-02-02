@@ -22,6 +22,7 @@ import type { Request, Table } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { TableHeatmap } from "@/components/table-heatmap";
+import { FloorPlanEditor } from "@/components/floor-plan-editor";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -140,6 +141,8 @@ export default function AdminPage() {
             </motion.div>
           </Link>
         </div>
+
+        <FloorPlanEditor />
 
         <TableHeatmap />
 

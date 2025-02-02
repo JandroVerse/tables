@@ -83,10 +83,11 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.post("/api/tables", async (req, res) => {
-    const { name } = req.body;
+    const { name, position } = req.body;
     const [table] = await db.insert(tables).values({
       name,
       qrCode: '',
+      position,
     }).returning();
 
     const qrCodeSvg = await QRCode.toString(
@@ -110,6 +111,24 @@ export function registerRoutes(app: Express): Server {
 
     res.json(updatedTable);
   });
+
+    // Add new route for updating table position
+    app.patch("/api/tables/:id", async (req, res) => {
+      const { id } = req.params;
+      const { position } = req.body;
+
+      const [updatedTable] = await db
+        .update(tables)
+        .set({ position })
+        .where(eq(tables.id, Number(id)))
+        .returning();
+
+      if (!updatedTable) {
+        return res.status(404).json({ message: "Table not found" });
+      }
+
+      res.json(updatedTable);
+    });
 
   // Request routes
   app.get("/api/requests", async (req, res) => {

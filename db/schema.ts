@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 
@@ -6,6 +6,22 @@ export const tables = pgTable("tables", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   qrCode: text("qr_code").notNull(),
+  position: jsonb("position").default({
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    shape: "square"
+  }),
+});
+
+export const floorPlan = pgTable("floor_plan", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  dimensions: jsonb("dimensions").notNull(),
+  sections: jsonb("sections").default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const tableSessions = pgTable("table_sessions", {
@@ -35,9 +51,14 @@ export const feedback = pgTable("feedback", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const tableRelations = relations(tables, ({ many }) => ({
+export const tableRelations = relations(tables, ({ many, one }) => ({
   sessions: many(tableSessions),
   requests: many(requests),
+  floorPlan: one(floorPlan),
+}));
+
+export const floorPlanRelations = relations(floorPlan, ({ many }) => ({
+  tables: many(tables),
 }));
 
 export const tableSessionRelations = relations(tableSessions, ({ one, many }) => ({
@@ -69,8 +90,11 @@ export const insertRequestSchema = createInsertSchema(requests);
 export const selectRequestSchema = createSelectSchema(requests);
 export const insertFeedbackSchema = createInsertSchema(feedback);
 export const selectFeedbackSchema = createSelectSchema(feedback);
+export const insertFloorPlanSchema = createInsertSchema(floorPlan);
+export const selectFloorPlanSchema = createSelectSchema(floorPlan);
 
 export type Table = typeof tables.$inferSelect;
 export type TableSession = typeof tableSessions.$inferSelect;
 export type Request = typeof requests.$inferSelect;
 export type Feedback = typeof feedback.$inferSelect;
+export type FloorPlan = typeof floorPlan.$inferSelect;
