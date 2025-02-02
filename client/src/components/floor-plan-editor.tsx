@@ -187,8 +187,18 @@ export function FloorPlanEditor() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Floor Plan Editor</CardTitle>
+        <div className="flex items-center gap-2">
+          <Checkbox 
+            id="edit-mode" 
+            checked={editMode} 
+            onCheckedChange={(checked) => setEditMode(checked as boolean)} 
+          />
+          <Label htmlFor="edit-mode" className="font-medium text-sm">
+            Edit Mode
+          </Label>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -214,17 +224,6 @@ export function FloorPlanEditor() {
           </div>
 
           <div className="relative">
-            <div className="absolute -top-2 right-0 z-10 flex items-center gap-2">
-              <Checkbox 
-                id="edit-mode" 
-                checked={editMode} 
-                onCheckedChange={(checked) => setEditMode(checked as boolean)} 
-              />
-              <Label htmlFor="edit-mode" className="font-medium text-sm">
-                Edit Mode
-              </Label>
-            </div>
-
             <div
               ref={editorRef}
               className="relative h-[600px] border rounded-lg bg-gray-50"
