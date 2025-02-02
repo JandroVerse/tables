@@ -294,7 +294,15 @@ export default function TablePage() {
                               opacity: { duration: 0.2 }
                             }}
                           >
-                            <Card className="overflow-hidden transition-colors hover:bg-green-50/50">
+                            <Card className={`overflow-hidden transition-colors ${
+                              request.type === "waiter" 
+                                ? "hover:bg-purple-100 bg-purple-50/70" 
+                                : request.type === "water"
+                                ? "hover:bg-blue-100 bg-blue-50/70"
+                                : request.type === "check"
+                                ? "hover:bg-emerald-200 bg-emerald-100/70"
+                                : "hover:bg-green-50/50"
+                            }`}>
                               <CardContent className="p-4">
                                 <div className="font-medium text-primary">{request.type}</div>
                                 {request.notes && (

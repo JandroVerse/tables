@@ -186,7 +186,15 @@ export default function AdminPage() {
                             exit="exit"
                             layoutId={`request-${request.id}`}
                           >
-                            <Card>
+                            <Card className={`${
+                              request.type === "waiter" 
+                                ? "bg-purple-50/70" 
+                                : request.type === "water"
+                                ? "bg-blue-50/70"
+                                : request.type === "check"
+                                ? "bg-emerald-100/70"
+                                : ""
+                            }`}>
                               <CardContent className="flex items-center justify-between p-4">
                                 <div>
                                   <h3 className="font-medium">
