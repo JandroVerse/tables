@@ -130,9 +130,6 @@ const DraggableTable = ({
   const handleResize = (handle: 'se' | 'sw' | 'ne' | 'nw', delta: { x: number; y: number }) => {
     if (!editMode) return;
 
-    const table = tables.find((t) => t.id === selectedTable!);
-    if (!table) return;
-
     let newWidth = currentSize.width;
     let newHeight = currentSize.height;
     let newX = position.x;
@@ -161,21 +158,13 @@ const DraggableTable = ({
         break;
     }
 
-    // Update both local state and send to server
+    // Update the local state
     setCurrentSize({ width: newWidth, height: newHeight });
     setPosition({ x: newX, y: newY });
 
-    // Create a complete position update
-    const updatedPosition = {
-      x: newX,
-      y: newY,
-      width: newWidth,
-      height: newHeight,
-      shape: table.position.shape,
-    };
-
-    // Only call updateTablePosition once with complete position data
-    updateTablePosition({ id: table.id, position: updatedPosition });
+    // Call the parent handlers with the new position and size
+    onDragStop(table.id, { x: newX, y: newY });
+    onResize(table.id, { width: newWidth, height: newHeight });
   };
 
   return (
@@ -344,7 +333,6 @@ export function FloorPlanEditor() {
     const table = tables.find((t) => t.id === tableId);
     if (!table) return;
 
-    // Create a complete position update including existing size and shape
     const updatedPosition = {
       ...table.position,
       x,
@@ -358,14 +346,13 @@ export function FloorPlanEditor() {
     const table = tables.find((t) => t.id === tableId);
     if (!table) return;
 
-    // Preserve all existing position properties while updating width/height
-    const position: TablePosition = {
+    const updatedPosition = {
       ...table.position,
       width,
       height,
     };
 
-    updateTablePosition({ id: tableId, position });
+    updateTablePosition({ id: tableId, position: updatedPosition });
   };
 
   const handleAddTable = () => {
