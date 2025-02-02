@@ -64,10 +64,11 @@ const ResizeHandle = ({ className, onDrag }: { className: string; onDrag: (delta
         const startY = e.clientY;
 
         const handleMouseMove = (e: MouseEvent) => {
-          onDrag({
+          const delta = {
             x: e.clientX - startX,
             y: e.clientY - startY,
-          });
+          };
+          onDrag(delta);
         };
 
         const handleMouseUp = () => {
@@ -110,34 +111,44 @@ const DraggableTable = ({
   editMode,
 }: DraggableTableProps) => {
   const [isResizing, setIsResizing] = useState(false);
-  const [currentSize, setCurrentSize] = useState({ width: table.position.width, height: table.position.height });
+  const [currentSize, setCurrentSize] = useState({ 
+    width: table.position.width, 
+    height: table.position.height 
+  });
+
+  useEffect(() => {
+    setCurrentSize({ 
+      width: table.position.width, 
+      height: table.position.height 
+    });
+  }, [table.position.width, table.position.height]);
 
   const handleResize = (handle: 'se' | 'sw' | 'ne' | 'nw', delta: { x: number; y: number }) => {
     if (!editMode) return;
 
-    let newWidth = table.position.width;
-    let newHeight = table.position.height;
+    let newWidth = currentSize.width;
+    let newHeight = currentSize.height;
     let newX = table.position.x;
     let newY = table.position.y;
 
     switch (handle) {
       case 'se':
-        newWidth = Math.max(60, table.position.width + delta.x);
-        newHeight = Math.max(60, table.position.height + delta.y);
+        newWidth = Math.max(60, currentSize.width + delta.x);
+        newHeight = Math.max(60, currentSize.height + delta.y);
         break;
       case 'sw':
-        newWidth = Math.max(60, table.position.width - delta.x);
-        newHeight = Math.max(60, table.position.height + delta.y);
+        newWidth = Math.max(60, currentSize.width - delta.x);
+        newHeight = Math.max(60, currentSize.height + delta.y);
         newX = table.position.x + delta.x;
         break;
       case 'ne':
-        newWidth = Math.max(60, table.position.width + delta.x);
-        newHeight = Math.max(60, table.position.height - delta.y);
+        newWidth = Math.max(60, currentSize.width + delta.x);
+        newHeight = Math.max(60, currentSize.height - delta.y);
         newY = table.position.y + delta.y;
         break;
       case 'nw':
-        newWidth = Math.max(60, table.position.width - delta.x);
-        newHeight = Math.max(60, table.position.height - delta.y);
+        newWidth = Math.max(60, currentSize.width - delta.x);
+        newHeight = Math.max(60, currentSize.height - delta.y);
         newX = table.position.x + delta.x;
         newY = table.position.y + delta.y;
         break;
@@ -147,9 +158,6 @@ const DraggableTable = ({
     onResize(table.id, { width: newWidth, height: newHeight });
     onDragStop(table.id, { x: newX, y: newY });
   };
-
-  const startResize = () => setIsResizing(true);
-  const endResize = () => setIsResizing(false);
 
   return (
     <Draggable
@@ -166,8 +174,8 @@ const DraggableTable = ({
           selected ? "ring-2 ring-primary" : ""
         } bg-green-300 hover:bg-green-400 transition-colors`}
         style={{
-          width: table.position.width,
-          height: table.position.height,
+          width: currentSize.width,
+          height: currentSize.height,
         }}
         onClick={(e) => {
           e.stopPropagation();
@@ -176,6 +184,60 @@ const DraggableTable = ({
       >
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-medium text-gray-800">{table.name}</span>
+        </div>
+        {editMode && (
+          <>
+            <ResizeHandle
+              className="bottom-0 right-0 -mb-1.5 -mr-1.5"
+              onDrag={(delta) => {
+                setIsResizing(true);
+                handleResize('se', delta);
+              }}
+            />
+            <ResizeHandle
+              className="bottom-0 left-0 -mb-1.5 -ml-1.5"
+              onDrag={(delta) => {
+                setIsResizing(true);
+                handleResize('sw', delta);
+              }}
+            />
+            <ResizeHandle
+              className="top-0 right-0 -mt-1.5 -mr-1.5"
+              onDrag={(delta) => {
+                setIsResizing(true);
+                handleResize('ne', delta);
+              }}
+            />
+            <ResizeHandle
+              className="top-0 left-0 -mt-1.5 -ml-1.5"
+              onDrag={(delta) => {
+                setIsResizing(true);
+                handleResize('nw', delta);
+              }}
+            />
+          </>
+        )}
+        <DimensionLabel 
+          width={currentSize.width} 
+          height={currentSize.height} 
+          isResizing={isResizing} 
+        />
+        <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
+          <div className="flex gap-2">
+            <AnimatePresence>
+              {activeRequests.map((request) => (
+                <motion.div
+                  key={request.id}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  className="bg-white rounded-full p-1 shadow-lg"
+                >
+                  <RequestIndicator type={request.type} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
         </div>
         {editMode && (
           <div className="absolute -top-8 left-1/2 -translate-x-1/2">
@@ -205,64 +267,6 @@ const DraggableTable = ({
               </AlertDialogContent>
             </AlertDialog>
           </div>
-        )}
-        <DimensionLabel 
-          width={currentSize.width} 
-          height={currentSize.height} 
-          isResizing={isResizing} 
-        />
-        <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
-          <div className="flex gap-2">
-            <AnimatePresence>
-              {activeRequests.map((request) => (
-                <motion.div
-                  key={request.id}
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  className="bg-white rounded-full p-1 shadow-lg"
-                >
-                  <RequestIndicator type={request.type} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
-        {editMode && (
-          <>
-            <ResizeHandle
-              className="bottom-0 right-0 -mb-1.5 -mr-1.5"
-              onDrag={(delta) => {
-                startResize();
-                handleResize('se', delta);
-              }}
-              onMouseUp={endResize}
-            />
-            <ResizeHandle
-              className="bottom-0 left-0 -mb-1.5 -ml-1.5"
-              onDrag={(delta) => {
-                startResize();
-                handleResize('sw', delta);
-              }}
-              onMouseUp={endResize}
-            />
-            <ResizeHandle
-              className="top-0 right-0 -mt-1.5 -mr-1.5"
-              onDrag={(delta) => {
-                startResize();
-                handleResize('ne', delta);
-              }}
-              onMouseUp={endResize}
-            />
-            <ResizeHandle
-              className="top-0 left-0 -mt-1.5 -ml-1.5"
-              onDrag={(delta) => {
-                startResize();
-                handleResize('nw', delta);
-              }}
-              onMouseUp={endResize}
-            />
-          </>
         )}
       </div>
     </Draggable>
