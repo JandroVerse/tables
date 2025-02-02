@@ -15,6 +15,7 @@ import { GlassWater, Bell, Receipt, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { Table, Request } from "@db/schema";
 import { motion, AnimatePresence } from "framer-motion";
+import { QuickRequestPreview } from "./quick-request-preview";
 
 interface TablePosition {
   x: number;
@@ -107,6 +108,7 @@ export function FloorPlanEditor() {
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [newTableName, setNewTableName] = useState("");
   const [selectedShape, setSelectedShape] = useState<"square" | "round">("square");
+  const [showRequestPreview, setShowRequestPreview] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
@@ -171,6 +173,8 @@ export function FloorPlanEditor() {
     );
   };
 
+  const selectedTableData = tables.find(t => t.id === selectedTable);
+
   return (
     <Card>
       <CardHeader>
@@ -210,11 +214,24 @@ export function FloorPlanEditor() {
                 table={table}
                 onDragStop={handleTableDragStop}
                 selected={selectedTable === table.id}
-                onClick={() => setSelectedTable(table.id)}
+                onClick={() => {
+                  setSelectedTable(table.id);
+                  setShowRequestPreview(true);
+                }}
                 activeRequests={getActiveRequests(table.id)}
               />
             ))}
           </div>
+
+          <QuickRequestPreview
+            table={selectedTableData}
+            activeRequests={selectedTable ? getActiveRequests(selectedTable) : []}
+            open={showRequestPreview}
+            onClose={() => {
+              setShowRequestPreview(false);
+              setSelectedTable(null);
+            }}
+          />
         </div>
       </CardContent>
     </Card>
