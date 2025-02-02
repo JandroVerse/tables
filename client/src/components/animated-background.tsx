@@ -5,12 +5,12 @@ export function AnimatedBackground() {
     <div className="fixed inset-0 z-0">
       {/* Warm ambient lighting effect */}
       <motion.div
-        className="absolute inset-0 opacity-60"
+        className="absolute inset-0 opacity-80"
         animate={{
           background: [
-            "radial-gradient(circle at 20% 20%, rgba(255, 183, 77, 0.3) 0%, rgba(255, 183, 77, 0) 70%)",
-            "radial-gradient(circle at 80% 80%, rgba(255, 183, 77, 0.3) 0%, rgba(255, 183, 77, 0) 70%)",
-            "radial-gradient(circle at 50% 50%, rgba(255, 183, 77, 0.3) 0%, rgba(255, 183, 77, 0) 70%)",
+            "radial-gradient(circle at 20% 20%, rgba(255, 183, 77, 0.5) 0%, rgba(255, 183, 77, 0) 70%)",
+            "radial-gradient(circle at 80% 80%, rgba(255, 183, 77, 0.5) 0%, rgba(255, 183, 77, 0) 70%)",
+            "radial-gradient(circle at 50% 50%, rgba(255, 183, 77, 0.5) 0%, rgba(255, 183, 77, 0) 70%)",
           ],
         }}
         transition={{
@@ -21,7 +21,7 @@ export function AnimatedBackground() {
       />
 
       {/* Restaurant-themed pattern overlay */}
-      <svg className="absolute inset-0 w-full h-full opacity-[0.05]">
+      <svg className="absolute inset-0 w-full h-full opacity-[0.08]">
         <pattern
           id="restaurant-pattern"
           x="0"
@@ -37,7 +37,7 @@ export function AnimatedBackground() {
             r="15"
             fill="none"
             stroke="currentColor"
-            strokeWidth="1"
+            strokeWidth="1.5"
             className="text-primary"
           />
           <circle
@@ -46,7 +46,7 @@ export function AnimatedBackground() {
             r="8"
             fill="none"
             stroke="currentColor"
-            strokeWidth="0.5"
+            strokeWidth="1"
             className="text-primary"
           />
         </pattern>
@@ -58,15 +58,15 @@ export function AnimatedBackground() {
         {[...Array(30)].map((_, i) => (
           <motion.div
             key={i}
-            className="absolute w-2 h-2 rounded-full bg-primary/30"
+            className="absolute w-3 h-3 rounded-full bg-primary/40"
             style={{
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,
             }}
             animate={{
-              y: [0, -30, 0],
-              opacity: [0, 0.8, 0],
-              scale: [1, 1.2, 1],
+              y: [0, -40, 0],
+              opacity: [0, 1, 0],
+              scale: [1, 1.5, 1],
             }}
             transition={{
               duration: Math.random() * 4 + 3,
