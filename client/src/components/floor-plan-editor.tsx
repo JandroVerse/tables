@@ -341,6 +341,7 @@ export function FloorPlanEditor() {
     const table = tables.find((t) => t.id === tableId);
     if (!table) return;
 
+    // Preserve all existing position properties while updating x,y
     const position: TablePosition = {
       ...table.position,
       x,
@@ -354,6 +355,7 @@ export function FloorPlanEditor() {
     const table = tables.find((t) => t.id === tableId);
     if (!table) return;
 
+    // Preserve all existing position properties while updating width/height
     const position: TablePosition = {
       ...table.position,
       width,
