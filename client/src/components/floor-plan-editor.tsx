@@ -82,6 +82,23 @@ const ResizeHandle = ({ className, onDrag }: { className: string; onDrag: (delta
   );
 };
 
+const DimensionLabel = ({ width, height, isResizing }: { width: number; height: number; isResizing: boolean }) => {
+  return (
+    <AnimatePresence>
+      {isResizing && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="absolute -top-16 left-1/2 -translate-x-1/2 bg-black/75 text-white px-3 py-1.5 rounded-md text-sm font-medium shadow-lg"
+        >
+          {Math.round(width)}px × {Math.round(height)}px
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
 const DraggableTable = ({
   table,
   onDragStop,
@@ -92,6 +109,9 @@ const DraggableTable = ({
   activeRequests,
   editMode,
 }: DraggableTableProps) => {
+  const [isResizing, setIsResizing] = useState(false);
+  const [currentSize, setCurrentSize] = useState({ width: table.position.width, height: table.position.height });
+
   const handleResize = (handle: 'se' | 'sw' | 'ne' | 'nw', delta: { x: number; y: number }) => {
     if (!editMode) return;
 
@@ -123,9 +143,13 @@ const DraggableTable = ({
         break;
     }
 
+    setCurrentSize({ width: newWidth, height: newHeight });
     onResize(table.id, { width: newWidth, height: newHeight });
     onDragStop(table.id, { x: newX, y: newY });
   };
+
+  const startResize = () => setIsResizing(true);
+  const endResize = () => setIsResizing(false);
 
   return (
     <Draggable
@@ -182,6 +206,11 @@ const DraggableTable = ({
             </AlertDialog>
           </div>
         )}
+        <DimensionLabel 
+          width={currentSize.width} 
+          height={currentSize.height} 
+          isResizing={isResizing} 
+        />
         <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
           <div className="flex gap-2">
             <AnimatePresence>
@@ -203,19 +232,35 @@ const DraggableTable = ({
           <>
             <ResizeHandle
               className="bottom-0 right-0 -mb-1.5 -mr-1.5"
-              onDrag={(delta) => handleResize('se', delta)}
+              onDrag={(delta) => {
+                startResize();
+                handleResize('se', delta);
+              }}
+              onMouseUp={endResize}
             />
             <ResizeHandle
               className="bottom-0 left-0 -mb-1.5 -ml-1.5"
-              onDrag={(delta) => handleResize('sw', delta)}
+              onDrag={(delta) => {
+                startResize();
+                handleResize('sw', delta);
+              }}
+              onMouseUp={endResize}
             />
             <ResizeHandle
               className="top-0 right-0 -mt-1.5 -mr-1.5"
-              onDrag={(delta) => handleResize('ne', delta)}
+              onDrag={(delta) => {
+                startResize();
+                handleResize('ne', delta);
+              }}
+              onMouseUp={endResize}
             />
             <ResizeHandle
               className="top-0 left-0 -mt-1.5 -ml-1.5"
-              onDrag={(delta) => handleResize('nw', delta)}
+              onDrag={(delta) => {
+                startResize();
+                handleResize('nw', delta);
+              }}
+              onMouseUp={endResize}
             />
           </>
         )}
