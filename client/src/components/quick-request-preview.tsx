@@ -6,7 +6,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { GlassWater, Bell, Receipt, Clock } from "lucide-react";
+import { GlassWater, Bell, Receipt, MessageSquare } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -34,7 +34,7 @@ const RequestIcon = ({ type }: { type: string }) => {
     water: <GlassWater className="h-5 w-5 text-blue-500" />,
     waiter: <Bell className="h-5 w-5 text-purple-500" />,
     check: <Receipt className="h-5 w-5 text-emerald-500" />,
-    other: <Clock className="h-5 w-5 text-gray-500" />
+    other: <MessageSquare className="h-5 w-5 text-gray-500" />
   };
 
   return icons[type as keyof typeof icons] || icons.other;
