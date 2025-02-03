@@ -120,7 +120,7 @@ export default function TablePage() {
             id: session.sessionId,
             expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
           }));
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
         })
         .catch((error) => {
           console.error("Failed to verify table or create session:", error);
@@ -141,11 +141,11 @@ export default function TablePage() {
     wsService.connect();
     const unsubscribe = wsService.subscribe((data) => {
       if (data.type === "new_request" || data.type === "update_request") {
-        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       }
     });
     return () => unsubscribe();
-  }, [tableId, queryClient]);
+  }, [tableId, queryClient, restaurantId]);
 
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", tableId, restaurantId],
@@ -175,7 +175,7 @@ export default function TablePage() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       setOtherRequestNote("");
       setIsDialogOpen(false);
       toast({
@@ -198,7 +198,7 @@ export default function TablePage() {
       return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       toast({
         title: "Request cancelled",
         description: "Your request has been cancelled successfully.",

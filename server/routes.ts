@@ -320,25 +320,35 @@ export function registerRoutes(app: Express): Server {
     const { tableId, restaurantId, sessionId } = req.query;
     let query = {};
 
-    if (tableId && sessionId && restaurantId) {
-      query = {
+    try {
+      // First verify the table belongs to the restaurant
+      const [table] = await db.query.tables.findMany({
+        where: and(
+          eq(tables.id, Number(tableId)),
+          eq(tables.restaurantId, Number(restaurantId))
+        ),
+      });
+
+      if (!table) {
+        return res.status(404).json({ message: "Table not found in this restaurant" });
+      }
+
+      // Now get requests for this table and session
+      const allRequests = await db.query.requests.findMany({
         where: and(
           eq(requests.tableId, Number(tableId)),
-          eq(requests.sessionId, sessionId as string),
-          eq(tables.restaurantId, Number(restaurantId))
-        )
-      };
-    } else if (tableId) {
-      query = { where: eq(requests.tableId, Number(tableId)) };
-    }
+          eq(requests.sessionId, sessionId as string)
+        ),
+        with: {
+          table: true
+        }
+      });
 
-    const allRequests = await db.query.requests.findMany({
-      ...query,
-      with: {
-        table: true
-      }
-    });
-    res.json(allRequests);
+      res.json(allRequests);
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+      res.status(500).json({ message: "Failed to fetch requests" });
+    }
   });
 
   app.post("/api/requests", async (req, res) => {
