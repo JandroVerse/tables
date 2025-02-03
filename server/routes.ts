@@ -141,7 +141,7 @@ export function registerRoutes(app: Express): Server {
         }
       });
 
-      console.log('Generated QR code, length:', qrCodeSvg.length);
+      console.log('Generated QR code SVG:', qrCodeSvg.substring(0, 100) + '...');
 
       // Update the table with the generated QR code
       const [updatedTable] = await db
@@ -150,7 +150,13 @@ export function registerRoutes(app: Express): Server {
         .where(eq(tables.id, table.id))
         .returning();
 
-      console.log('Updated table with QR code:', updatedTable.id);
+      if (!updatedTable.qrCode) {
+        throw new Error('QR code was not saved properly');
+      }
+
+      console.log('Successfully updated table with QR code:', updatedTable.id);
+      console.log('QR code length:', updatedTable.qrCode.length);
+
       res.json(updatedTable);
     } catch (error) {
       console.error('Error in table creation/QR generation:', error);
