@@ -6,6 +6,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/
 import { useForm } from "react-hook-form";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 
 interface AuthForm {
   username: string;
@@ -20,12 +21,23 @@ export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const form = useForm<AuthForm>();
 
-  // If already logged in, redirect to admin
+  // Query restaurants when user is logged in
+  const { data: restaurants } = useQuery({
+    queryKey: ["/api/restaurants"],
+    enabled: !!user,
+  });
+
+  // If logged in, redirect to appropriate page
   useEffect(() => {
     if (user) {
-      setLocation("/admin");
+      // If user has no restaurants, send them to onboarding
+      if (!restaurants?.length) {
+        setLocation("/onboarding");
+      } else {
+        setLocation("/admin");
+      }
     }
-  }, [user, setLocation]);
+  }, [user, restaurants, setLocation]);
 
   const onSubmit = (data: AuthForm) => {
     if (isLogin) {
@@ -40,10 +52,12 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/20">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>{isLogin ? "Login" : "Register"}</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">
+            {isLogin ? "Welcome Back" : "Create Your Account"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -86,7 +100,11 @@ export default function AuthPage() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full">
+              <Button 
+                type="submit" 
+                className="w-full"
+                disabled={loginMutation.isPending || registerMutation.isPending}
+              >
                 {isLogin ? "Login" : "Register"}
               </Button>
               <Button
