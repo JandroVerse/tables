@@ -85,86 +85,88 @@ const DraggableTable = ({
   });
   const [resizing, setResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [initialMousePos, setInitialMousePos] = useState({ x: 0, y: 0 });
+  const [initialSize, setInitialSize] = useState({ width: 0, height: 0 });
+  const [initialPosition, setInitialPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    setSize({
-      width: table.position.width || 100,
-      height: table.position.height || 100,
-    });
-    setPosition({
-      x: table.position.x || 0,
-      y: table.position.y || 0,
-    });
-  }, [table.position]);
+    if (!resizing) {
+      setSize({
+        width: table.position.width || 100,
+        height: table.position.height || 100,
+      });
+      setPosition({
+        x: table.position.x || 0,
+        y: table.position.y || 0,
+      });
+    }
+  }, [table.position, resizing]);
 
   const handleResizeStart = (e: React.MouseEvent, handle: string) => {
     if (!editMode) return;
     e.stopPropagation();
     e.preventDefault();
 
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startWidth = size.width;
-    const startHeight = size.height;
-    const startPosition = { ...position };
-
     setResizing(true);
     setResizeHandle(handle);
+    setInitialMousePos({ x: e.clientX, y: e.clientY });
+    setInitialSize({ ...size });
+    setInitialPosition({ ...position });
 
     const handleMove = (e: MouseEvent) => {
       if (!resizing) return;
 
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
+      const deltaX = e.clientX - initialMousePos.x;
+      const deltaY = e.clientY - initialMousePos.y;
 
-      let newWidth = startWidth;
-      let newHeight = startHeight;
-      let newX = startPosition.x;
-      let newY = startPosition.y;
+      let newSize = { ...initialSize };
+      let newPosition = { ...initialPosition };
 
-      // Handle resizing based on which corner is being dragged
       switch (handle) {
         case 'top-left':
-          newWidth = Math.max(80, startWidth - deltaX);
-          newHeight = Math.max(80, startHeight - deltaY);
-          newX = startPosition.x + (startWidth - newWidth);
-          newY = startPosition.y + (startHeight - newHeight);
+          newSize.width = Math.max(80, initialSize.width - deltaX);
+          newSize.height = Math.max(80, initialSize.height - deltaY);
+          newPosition.x = initialPosition.x + (initialSize.width - newSize.width);
+          newPosition.y = initialPosition.y + (initialSize.height - newSize.height);
           break;
         case 'top-right':
-          newWidth = Math.max(80, startWidth + deltaX);
-          newHeight = Math.max(80, startHeight - deltaY);
-          newY = startPosition.y + (startHeight - newHeight);
+          newSize.width = Math.max(80, initialSize.width + deltaX);
+          newSize.height = Math.max(80, initialSize.height - deltaY);
+          newPosition.y = initialPosition.y + (initialSize.height - newSize.height);
           break;
         case 'bottom-left':
-          newWidth = Math.max(80, startWidth - deltaX);
-          newHeight = Math.max(80, startHeight + deltaY);
-          newX = startPosition.x + (startWidth - newWidth);
+          newSize.width = Math.max(80, initialSize.width - deltaX);
+          newSize.height = Math.max(80, initialSize.height + deltaY);
+          newPosition.x = initialPosition.x + (initialSize.width - newSize.width);
           break;
         case 'bottom-right':
-          newWidth = Math.max(80, startWidth + deltaX);
-          newHeight = Math.max(80, startHeight + deltaY);
+          newSize.width = Math.max(80, initialSize.width + deltaX);
+          newSize.height = Math.max(80, initialSize.height + deltaY);
           break;
       }
 
-      // Enforce maximum size
-      newWidth = Math.min(300, newWidth);
-      newHeight = Math.min(300, newHeight);
+      // Apply max constraints
+      newSize.width = Math.min(300, newSize.width);
+      newSize.height = Math.min(300, newSize.height);
 
-      setSize({ width: newWidth, height: newHeight });
-      setPosition({ x: newX, y: newY });
+      setSize(newSize);
+      setPosition(newPosition);
     };
 
     const handleEnd = () => {
       setResizing(false);
       setResizeHandle(null);
+
+      // Update both size and position in parent
       onResize(table.id, size);
       onDragStop(table.id, position);
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleEnd);
+
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
     };
 
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleEnd);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
   };
 
   return (
@@ -206,28 +208,28 @@ const DraggableTable = ({
             <div
               className={`absolute -top-1 -left-1 w-3 h-3 cursor-nw-resize rounded-full bg-primary ${
                 resizeHandle === 'top-left' ? 'opacity-100' : 'opacity-50'
-              }`}
+              } hover:opacity-100`}
               onMouseDown={(e) => handleResizeStart(e, 'top-left')}
             />
             {/* Top-right resize handle */}
             <div
               className={`absolute -top-1 -right-1 w-3 h-3 cursor-ne-resize rounded-full bg-primary ${
                 resizeHandle === 'top-right' ? 'opacity-100' : 'opacity-50'
-              }`}
+              } hover:opacity-100`}
               onMouseDown={(e) => handleResizeStart(e, 'top-right')}
             />
             {/* Bottom-left resize handle */}
             <div
               className={`absolute -bottom-1 -left-1 w-3 h-3 cursor-sw-resize rounded-full bg-primary ${
                 resizeHandle === 'bottom-left' ? 'opacity-100' : 'opacity-50'
-              }`}
+              } hover:opacity-100`}
               onMouseDown={(e) => handleResizeStart(e, 'bottom-left')}
             />
             {/* Bottom-right resize handle */}
             <div
               className={`absolute -bottom-1 -right-1 w-3 h-3 cursor-se-resize rounded-full bg-primary ${
                 resizeHandle === 'bottom-right' ? 'opacity-100' : 'opacity-50'
-              }`}
+              } hover:opacity-100`}
               onMouseDown={(e) => handleResizeStart(e, 'bottom-right')}
             />
           </>
