@@ -138,7 +138,7 @@ export default function TablePage() {
         setSessionId(sessionData.sessionId);
         localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
           id: sessionData.sessionId,
-          expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+          expiry: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString()
         }));
         localStorage.setItem('sessionId', sessionData.sessionId);
 

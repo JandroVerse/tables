@@ -26,10 +26,15 @@ class WebSocketService {
     const host = window.location.host;
     const sessionId = localStorage.getItem('sessionId');
 
-    console.log('WebSocket: Attempting to connect to', `${protocol}//${host}/ws`);
+    // Include session ID in query params for initial authentication
+    const wsUrl = new URL(`${protocol}//${host}/ws`);
+    if (sessionId) {
+      wsUrl.searchParams.append('sessionId', sessionId);
+    }
 
-    // Include session ID in the WebSocket URL
-    this.ws = new WebSocket(`${protocol}//${host}/ws${sessionId ? `?sessionId=${sessionId}` : ''}`);
+    console.log('WebSocket: Attempting to connect to', wsUrl.toString());
+
+    this.ws = new WebSocket(wsUrl.toString());
 
     this.ws.onopen = () => {
       console.log('WebSocket: Connection established');
@@ -85,8 +90,12 @@ class WebSocketService {
 
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('WebSocket: Sending message', message);
-      // Include session ID in the message payload
       const sessionId = localStorage.getItem('sessionId');
+      if (!sessionId) {
+        console.error('WebSocket: No session ID available');
+        return;
+      }
+
       const messageWithSession = {
         ...message,
         sessionId
