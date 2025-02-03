@@ -112,21 +112,8 @@ const DraggableTable = ({
     };
 
     const handleEnd = () => {
-      if (!resizing) return;
-
       setResizing(false);
-      // Important: Update the table position with both size and position
-      const updatedPosition = {
-        ...table.position,
-        width: size.width,
-        height: size.height,
-        x: position.x,
-        y: position.y,
-      };
-
-      // Send the complete position update to the backend
-      updateTablePosition({ id: table.id, position: updatedPosition });
-
+      onResize(table.id, size);
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleEnd);
     };
@@ -264,30 +251,10 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
   const { mutate: updateTablePosition } = useMutation({
     mutationFn: async ({ id, position }: { id: number; position: TablePosition }) => {
-      const response = await apiRequest("PATCH", `/api/restaurants/${restaurantId}/tables/${id}`, { 
-        position: {
-          ...position,
-          width: Math.round(position.width),
-          height: Math.round(position.height),
-          x: Math.round(position.x),
-          y: Math.round(position.y),
-        }
-      });
-      if (!response.ok) {
-        throw new Error('Failed to update table position');
-      }
-      return response.json();
+      return apiRequest("PATCH", `/api/restaurants/${restaurantId}/tables/${id}`, { position });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/restaurants/${restaurantId}/tables`] });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to update table position",
-        variant: "destructive",
-      });
-      console.error("Failed to update table position:", error);
     },
   });
 
