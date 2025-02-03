@@ -88,7 +88,6 @@ const DraggableTable = ({
   const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     if (!editMode) return;
     e.stopPropagation();
-    e.preventDefault();
     setResizing(true);
 
     const startX = e.clientX;
@@ -97,7 +96,6 @@ const DraggableTable = ({
     const startHeight = size.height;
 
     const handleMove = (e: MouseEvent) => {
-      e.preventDefault();
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
@@ -113,48 +111,15 @@ const DraggableTable = ({
       setSize({ width: newWidth, height: newHeight });
     };
 
-    const handleEnd = (e: MouseEvent) => {
-      e.preventDefault();
+    const handleEnd = () => {
       setResizing(false);
-      // Update the server with the new size by updating the table's position object
-      updateTablePosition({
-        id: table.id,
-        position: {
-          ...table.position,
-          width: size.width,
-          height: size.height,
-          x: position.x,
-          y: position.y,
-        },
-      });
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleEnd);
-    };
-
-    // Add cleanup on component unmount or when clicking outside
-    const cleanup = () => {
-      setResizing(false);
+      onResize(table.id, size);
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleEnd);
     };
 
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleEnd);
-    window.addEventListener('blur', cleanup);
-
-    // Cleanup when clicking outside
-    const handleClickOutside = (e: MouseEvent) => {
-      if (resizing) {
-        cleanup();
-      }
-    };
-    window.addEventListener('click', handleClickOutside);
-
-    return () => {
-      cleanup();
-      window.removeEventListener('click', handleClickOutside);
-      window.removeEventListener('blur', cleanup);
-    };
   };
 
   return (
