@@ -110,6 +110,7 @@ export function registerRoutes(app: Express): Server {
       return res.status(404).json({ message: "Restaurant not found" });
     }
 
+    // First create the table with a temporary empty QR code
     const [table] = await db.insert(tables)
       .values({
         name,
@@ -119,27 +120,34 @@ export function registerRoutes(app: Express): Server {
       })
       .returning();
 
-    // Generate QR code with restaurant context
-    const qrCodeSvg = await QRCode.toString(
-      `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table/${restaurantId}/${table.id}`,
-      { 
-        type: 'svg',
-        width: 256,
-        margin: 4,
-        color: {
-          dark: '#000000',
-          light: '#ffffff'
+    // Generate QR code with restaurant context and table ID
+    try {
+      const qrCodeSvg = await QRCode.toString(
+        `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table/${restaurantId}/${table.id}`,
+        { 
+          type: 'svg',
+          width: 256,
+          margin: 4,
+          color: {
+            dark: '#000000',
+            light: '#ffffff'
+          }
         }
-      }
-    );
+      );
 
-    const [updatedTable] = await db
-      .update(tables)
-      .set({ qrCode: qrCodeSvg })
-      .where(eq(tables.id, table.id))
-      .returning();
+      // Update the table with the generated QR code
+      const [updatedTable] = await db
+        .update(tables)
+        .set({ qrCode: qrCodeSvg })
+        .where(eq(tables.id, table.id))
+        .returning();
 
-    res.json(updatedTable);
+      res.json(updatedTable);
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+      // Even if QR generation fails, return the table
+      res.json(table);
+    }
   });
 
   app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
