@@ -13,17 +13,26 @@ const clientsBySession = new Map<string, Set<WebSocket>>();
 const clientsByRestaurant = new Map<number, Set<WebSocket>>();
 
 // Keep track of client types
-const clientTypes = new Map<WebSocket, { type: 'customer' | 'admin', restaurantId?: number }>();
+const clientTypes = new Map<WebSocket, { 
+  type: 'customer' | 'admin';
+  restaurantId?: number;
+  sessionId: string;
+}>();
 
 function broadcastToRestaurant(restaurantId: number, message: any) {
+  console.log(`Broadcasting to restaurant ${restaurantId}:`, message);
   const clients = clientsByRestaurant.get(restaurantId);
   if (clients) {
     const messageStr = JSON.stringify(message);
+    console.log(`Found ${clients.size} clients for restaurant ${restaurantId}`);
     clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
+        console.log('Sending to client with type:', clientTypes.get(client)?.type);
         client.send(messageStr);
       }
     });
+  } else {
+    console.log(`No clients found for restaurant ${restaurantId}`);
   }
 }
 
@@ -74,17 +83,27 @@ export function registerRoutes(app: Express): Server {
         return false;
       }
 
-      // Get session ID from query parameters
       const url = new URL(req.url!, `http://${req.headers.host}`);
       const sessionId = url.searchParams.get('sessionId');
+      const clientType = url.searchParams.get('clientType');
+      const restaurantId = url.searchParams.get('restaurantId');
 
-      if (!sessionId) {
-        console.log('WebSocket: Connection rejected - No session ID provided');
+      console.log('WebSocket connection request:', {
+        sessionId,
+        clientType,
+        restaurantId
+      });
+
+      if (!sessionId || !clientType) {
+        console.log('WebSocket: Connection rejected - Missing required parameters');
         return false;
       }
 
-      // Store session ID in request for use in connection handler
+      // Store parameters in request for use in connection handler
       (req as any).sessionId = sessionId;
+      (req as any).clientType = clientType;
+      (req as any).restaurantId = restaurantId ? Number(restaurantId) : undefined;
+
       return true;
     }
   });
@@ -100,11 +119,13 @@ export function registerRoutes(app: Express): Server {
 
   // WebSocket setup section
   wss.on("connection", (ws: WebSocket, req: any) => {
-    const sessionId = req.sessionId;
-    const url = new URL(req.url!, `http://${req.headers.host}`);
-    const clientType = url.searchParams.get('clientType') as 'customer' | 'admin';
+    const { sessionId, clientType, restaurantId } = req;
 
-    console.log("WebSocket: New connection with session ID:", sessionId, "Type:", clientType);
+    console.log("WebSocket: New connection:", {
+      sessionId,
+      clientType,
+      restaurantId
+    });
 
     // Add client to session group
     if (!clientsBySession.has(sessionId)) {
@@ -112,8 +133,20 @@ export function registerRoutes(app: Express): Server {
     }
     clientsBySession.get(sessionId)!.add(ws);
 
-    // Store client type
-    clientTypes.set(ws, { type: clientType });
+    // If it's an admin client and restaurantId is provided, add to restaurant group
+    if (clientType === 'admin' && restaurantId) {
+      if (!clientsByRestaurant.has(restaurantId)) {
+        clientsByRestaurant.set(restaurantId, new Set());
+      }
+      clientsByRestaurant.get(restaurantId)!.add(ws);
+    }
+
+    // Store client info
+    clientTypes.set(ws, {
+      type: clientType,
+      restaurantId: restaurantId,
+      sessionId
+    });
 
     ws.on("message", async (message: string) => {
       try {
@@ -126,26 +159,15 @@ export function registerRoutes(app: Express): Server {
           return;
         }
 
-        // If it's an admin client and restaurantId is provided, add to restaurant group
-        if (data.clientType === 'admin' && data.restaurantId) {
-          if (!clientsByRestaurant.has(data.restaurantId)) {
-            clientsByRestaurant.set(data.restaurantId, new Set());
-          }
-          clientsByRestaurant.get(data.restaurantId)!.add(ws);
-          clientTypes.get(ws)!.restaurantId = data.restaurantId;
-        }
-
         // Handle broadcasting based on message type and client type
-        if (data.broadcast) {
-          // Broadcast to all clients in the restaurant
-          if (data.restaurantId) {
-            broadcastToRestaurant(data.restaurantId, data);
-          }
+        if (data.broadcast && data.restaurantId) {
+          console.log('Broadcasting message to restaurant:', data.restaurantId);
+          broadcastToRestaurant(data.restaurantId, data);
         } else {
           // Only broadcast to clients in the same session
           const sessionClients = clientsBySession.get(sessionId);
           if (sessionClients) {
-            console.log(`WebSocket: Broadcasting to ${sessionClients.size} clients in session ${sessionId}`);
+            console.log(`Broadcasting to ${sessionClients.size} session clients`);
             sessionClients.forEach((client) => {
               if (client !== ws && client.readyState === WebSocket.OPEN) {
                 client.send(message);
@@ -159,7 +181,11 @@ export function registerRoutes(app: Express): Server {
     });
 
     ws.on("close", () => {
-      console.log("WebSocket: Client disconnected from session:", sessionId);
+      console.log("WebSocket: Client disconnected:", {
+        sessionId,
+        clientType,
+        restaurantId
+      });
 
       // Remove from session group
       const sessionClients = clientsBySession.get(sessionId);
@@ -171,13 +197,12 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Remove from restaurant group if applicable
-      const clientInfo = clientTypes.get(ws);
-      if (clientInfo?.restaurantId) {
-        const restaurantClients = clientsByRestaurant.get(clientInfo.restaurantId);
+      if (restaurantId) {
+        const restaurantClients = clientsByRestaurant.get(restaurantId);
         if (restaurantClients) {
           restaurantClients.delete(ws);
           if (restaurantClients.size === 0) {
-            clientsByRestaurant.delete(clientInfo.restaurantId);
+            clientsByRestaurant.delete(restaurantId);
           }
         }
       }

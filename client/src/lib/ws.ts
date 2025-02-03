@@ -22,8 +22,9 @@ class WebSocketService {
     private connectionTimer: NodeJS.Timeout | null = null;
     private sessionId: string | null = null;
     private clientType: 'customer' | 'admin' = 'customer';
+    private currentRestaurantId: number | null = null;
 
-    connect(forceSessionId?: string, type: 'customer' | 'admin' = 'customer') {
+    connect(forceSessionId?: string, type: 'customer' | 'admin' = 'customer', restaurantId?: number) {
       if (this.ws?.readyState === WebSocket.OPEN) {
         console.log('WebSocket: Already connected');
         return;
@@ -33,21 +34,11 @@ class WebSocketService {
       if (forceSessionId) {
         console.log('WebSocket: Using provided session ID:', forceSessionId);
         this.sessionId = forceSessionId;
-        localStorage.setItem('sessionId', forceSessionId);
       }
 
-      // If no session ID provided, try to get from localStorage
-      if (!this.sessionId) {
-        this.sessionId = localStorage.getItem('sessionId');
-      }
-
-      if (!this.sessionId) {
-        console.log('WebSocket: No session ID available');
-        return;
-      }
-
-      // Store client type
+      // Store client type and restaurant ID
       this.clientType = type;
+      this.currentRestaurantId = restaurantId || null;
 
       // Clear any existing connection timer
       if (this.connectionTimer) {
@@ -55,15 +46,19 @@ class WebSocketService {
         this.connectionTimer = null;
       }
 
-      console.log('WebSocket: Connecting with session ID:', this.sessionId);
+      console.log('WebSocket: Connecting with session ID:', this.sessionId, 'type:', type, 'restaurantId:', restaurantId);
 
       try {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         const wsUrl = new URL(`${protocol}//${host}/ws`);
-        wsUrl.searchParams.append('sessionId', this.sessionId);
+        wsUrl.searchParams.append('sessionId', this.sessionId || 'none');
         wsUrl.searchParams.append('clientType', this.clientType);
+        if (restaurantId) {
+          wsUrl.searchParams.append('restaurantId', restaurantId.toString());
+        }
 
+        console.log('WebSocket: Connecting to URL:', wsUrl.toString());
         this.ws = new WebSocket(wsUrl.toString());
 
         this.ws.onopen = () => {
@@ -72,7 +67,8 @@ class WebSocketService {
           this.reconnectAttempts = 0;
           this.notifyListeners({
             type: 'connection_status',
-            status: 'connected'
+            status: 'connected',
+            restaurantId: this.currentRestaurantId
           });
         };
 
@@ -111,7 +107,7 @@ class WebSocketService {
         status: 'disconnected'
       });
 
-      if (this.reconnectAttempts < this.maxReconnectAttempts && this.sessionId) {
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
         const delay = this.reconnectDelay * Math.min(Math.pow(2, this.reconnectAttempts), 10);
         console.log(`WebSocket: Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}) in ${delay}ms`);
 
@@ -121,35 +117,32 @@ class WebSocketService {
         });
 
         this.reconnectAttempts++;
-        this.connectionTimer = setTimeout(() => this.connect(this.sessionId!, this.clientType), delay);
+        this.connectionTimer = setTimeout(
+          () => this.connect(this.sessionId!, this.clientType, this.currentRestaurantId || undefined),
+          delay
+        );
       } else {
-        console.error('WebSocket: Max reconnection attempts reached or no session ID available');
+        console.error('WebSocket: Max reconnection attempts reached');
       }
     }
 
     send(message: WebSocketMessage) {
-      if (!this.sessionId || !message.tableId || !message.restaurantId) {
-        console.error('WebSocket: Cannot send message - missing required data:', { 
-          sessionId: this.sessionId,
-          tableId: message.tableId,
-          restaurantId: message.restaurantId
-        });
+      if (!this.ws?.readyState === WebSocket.OPEN) {
+        console.error('WebSocket: Cannot send message - connection not open');
+        this.connect(this.sessionId, this.clientType, this.currentRestaurantId || undefined);
         return;
       }
 
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        const messageWithSession = {
-          ...message,
-          sessionId: this.sessionId,
-          clientType: this.clientType,
-          broadcast: message.broadcast ?? false
-        };
-        console.log('WebSocket: Sending message:', messageWithSession);
-        this.ws.send(JSON.stringify(messageWithSession));
-      } else {
-        console.error('WebSocket: Cannot send message - connection not open');
-        this.connect(this.sessionId, this.clientType);
-      }
+      const messageWithSession = {
+        ...message,
+        sessionId: this.sessionId,
+        clientType: this.clientType,
+        restaurantId: this.currentRestaurantId,
+        broadcast: message.broadcast ?? true
+      };
+
+      console.log('WebSocket: Sending message:', messageWithSession);
+      this.ws.send(JSON.stringify(messageWithSession));
     }
 
     subscribe(listener: ServiceRequestListener) {
@@ -174,6 +167,7 @@ class WebSocketService {
       this.isConnected = false;
       this.reconnectAttempts = 0;
       this.sessionId = null;
+      this.currentRestaurantId = null;
       this.notifyListeners({
         type: 'connection_status',
         status: 'disconnected'
@@ -183,6 +177,6 @@ class WebSocketService {
     private notifyListeners(message: WebSocketMessage) {
       this.listeners.forEach(listener => listener(message));
     }
-  }
+}
 
-  export const wsService = new WebSocketService();
+export const wsService = new WebSocketService();
