@@ -56,16 +56,29 @@ export default function TablePage() {
   const queryClient = useQueryClient();
   const params = useParams();
 
-  console.log('Table Page Params:', params);
-
   const restaurantId = Number(params.restaurantId);
   const tableId = Number(params.tableId);
 
-  console.log('Parsed IDs:', { restaurantId, tableId });
   const [otherRequestNote, setOtherRequestNote] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(() => {
+    // Try to get existing sessionId from localStorage
+    const storedSession = localStorage.getItem(`table_session_${tableId}`);
+    if (storedSession) {
+      try {
+        const session = JSON.parse(storedSession);
+        if (new Date(session.expiry) > new Date()) {
+          return session.id;
+        } else {
+          localStorage.removeItem(`table_session_${tableId}`);
+        }
+      } catch (e) {
+        localStorage.removeItem(`table_session_${tableId}`);
+      }
+    }
+    return null;
+  });
   const [isWaterDialogOpen, setIsWaterDialogOpen] = useState(false);
   const [waterCount, setWaterCount] = useState(1);
   const [isValidating, setIsValidating] = useState(true);
@@ -79,14 +92,22 @@ export default function TablePage() {
         .then((data) => {
           if (data.valid) {
             setIsValid(true);
-            // Fixed the session creation endpoint URL
-            return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
+            if (!sessionId) {
+              // Only create a new session if we don't have a valid one
+              return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
+            }
+            return new Response(JSON.stringify({ sessionId }));
           }
           throw new Error("Invalid table");
         })
         .then((res) => res.json())
         .then((session) => {
           setSessionId(session.sessionId);
+          // Store session in localStorage with 24-hour expiry
+          localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
+            id: session.sessionId,
+            expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+          }));
           queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
         })
         .catch((error) => {
