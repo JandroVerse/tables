@@ -73,7 +73,7 @@ export default function TablePage() {
   const [sessionExpiryTime, setSessionExpiryTime] = useState<Date | null>(null);
   const [remainingTime, setRemainingTime] = useState<string>("");
 
-  // Initialize session and validate table and WebSocket connection
+  // Initialize session and validate table
   useEffect(() => {
     if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
       console.error('Invalid table or restaurant ID:', { restaurantId, tableId });
@@ -85,8 +85,6 @@ export default function TablePage() {
     const initializeSession = async () => {
       try {
         console.log(`Validating table ${tableId} for restaurant ${restaurantId}`);
-
-        // First, validate the table
         const tableResponse = await fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`);
 
         if (!tableResponse.ok) {
@@ -110,18 +108,11 @@ export default function TablePage() {
             const session = JSON.parse(storedSession);
             const expiryTime = new Date(session.expiry);
 
-            // Only use stored session if it hasn't expired
             if (expiryTime > new Date()) {
               console.log('Found valid stored session:', session);
               existingSession = session;
               setSessionId(session.id);
               setSessionExpiryTime(expiryTime);
-
-              // Connect WebSocket with existing session
-              wsService.disconnect();
-              wsService.connect(session.id);
-
-              // Return early since we have a valid session
               return;
             } else {
               console.log('Stored session has expired');
@@ -132,7 +123,6 @@ export default function TablePage() {
           }
         }
 
-        // If no valid stored session, create a new one
         console.log('Creating new session');
         const sessionResponse = await fetch(
           `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`,
@@ -145,24 +135,17 @@ export default function TablePage() {
         const sessionData = await sessionResponse.json();
         console.log('New session data:', sessionData);
 
-        // Set session data and initialize WebSocket
         const newSessionId = sessionData.sessionId;
         setSessionId(newSessionId);
 
-        // Calculate expiry time - 3 hours from session start time
         const expiryTime = new Date(new Date(sessionData.startedAt).getTime() + 3 * 60 * 60 * 1000);
         setSessionExpiryTime(expiryTime);
 
-        // Store session info
         localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
           id: newSessionId,
           expiry: expiryTime.toISOString()
         }));
 
-        wsService.disconnect(); // Clean up any existing connection
-        wsService.connect(newSessionId); // Connect with new session ID
-
-        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       } catch (error) {
         console.error("Failed to initialize session:", error);
         toast({
@@ -177,8 +160,38 @@ export default function TablePage() {
     };
 
     initializeSession();
-  }, [restaurantId, tableId, queryClient, toast]);
+  }, [restaurantId, tableId, toast]);
 
+  // WebSocket setup
+  useEffect(() => {
+    if (!sessionId || !tableId || !restaurantId) {
+      console.log('Cannot setup WebSocket - missing required data:', { sessionId, tableId, restaurantId });
+      return;
+    }
+
+    console.log('Setting up WebSocket with session:', sessionId);
+
+    // Clean up any existing connection before establishing a new one
+    wsService.disconnect();
+    wsService.connect(sessionId, 'customer');
+
+    const unsubscribe = wsService.subscribe((data) => {
+      console.log('Received WebSocket event:', data);
+
+      if (data.type === 'new_request' || data.type === 'update_request') {
+        console.log('Invalidating requests query due to:', data.type);
+        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+      }
+    });
+
+    return () => {
+      console.log('Cleaning up WebSocket connection');
+      unsubscribe();
+      wsService.disconnect();
+    };
+  }, [sessionId, tableId, restaurantId, queryClient]);
+
+  // Timer effect for session expiry
   useEffect(() => {
     const updateRemainingTime = () => {
       if (sessionExpiryTime) {
@@ -190,28 +203,15 @@ export default function TablePage() {
           setRemainingTime(`expires in ${hours}h ${minutes}m`);
         } else {
           setRemainingTime("Session expired");
-          // Optionally redirect or show expired message
         }
       }
     };
 
-    const storedSession = localStorage.getItem(`table_session_${tableId}`);
-    if (storedSession) {
-      try {
-        const session = JSON.parse(storedSession);
-        setSessionExpiryTime(new Date(session.expiry));
-      } catch (e) {
-        console.error("Failed to parse session expiry time:", e);
-      }
-    }
-
     updateRemainingTime();
-    // Update every 30 seconds instead of every minute
     const interval = setInterval(updateRemainingTime, 30000);
 
     return () => clearInterval(interval);
-  }, [sessionExpiryTime, tableId]);
-
+  }, [sessionExpiryTime]);
 
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", tableId, restaurantId],
@@ -266,16 +266,6 @@ export default function TablePage() {
     });
   };
 
-  const handleWaiterRequest = () => {
-    console.log('Waiter request initiated:', {
-      tableId,
-      restaurantId,
-      sessionId
-    });
-
-    createRequest({ type: "waiter" });
-  };
-
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
       console.log('Creating request: Starting mutation', { type, notes, tableId, restaurantId, sessionId });
@@ -327,16 +317,21 @@ export default function TablePage() {
         description: "Staff has been notified of your request.",
       });
 
-      // Send WebSocket notification with full request data
-      const wsMessage = {
-        type: "new_request" as const,
+      // Send WebSocket notification
+      console.log('Sending WebSocket notification for new request:', {
+        type: "new_request",
         tableId,
         restaurantId,
         request: data,
-        broadcast: true // Enable broadcasting to all restaurant clients
-      };
-      console.log('Creating request: Sending WebSocket notification', wsMessage);
-      wsService.send(wsMessage);
+        sessionId
+      });
+
+      wsService.send({
+        type: "new_request",
+        tableId,
+        restaurantId,
+        request: data
+      });
     },
     onError: (error: Error) => {
       console.error('Creating request: Mutation failed', error);
@@ -347,6 +342,16 @@ export default function TablePage() {
       });
     },
   });
+
+  const handleWaiterRequest = () => {
+    console.log('Waiter request initiated:', {
+      tableId,
+      restaurantId,
+      sessionId
+    });
+
+    createRequest({ type: "waiter" });
+  };
 
   const { mutate: cancelRequest } = useMutation({
     mutationFn: async (id: number) => {
@@ -403,40 +408,28 @@ export default function TablePage() {
   };
 
   useEffect(() => {
-    if (!sessionId || !tableId || !restaurantId) {
-      console.log('Table page: WebSocket effect - Missing required data:', { sessionId, tableId, restaurantId });
-      return;
-    }
-
-    console.log('Table page: Setting up WebSocket event subscription with:', { sessionId, tableId, restaurantId });
-
-    // Subscribe to WebSocket events
-    const unsubscribe = wsService.subscribe((data) => {
-      console.log('Table page: Received WebSocket event:', data);
-
-      switch (data.type) {
-        case 'new_request':
-        case 'update_request':
-          console.log('Table page: Invalidating requests query due to WebSocket event:', data);
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
-          break;
-        case 'connection_status':
-          console.log('Table page: WebSocket connection status update:', data.status);
-          if (data.status === 'connected') {
-            queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
-          }
-          break;
-        default:
-          console.log('Table page: Unknown WebSocket event type:', data.type);
+    const updateRemainingTime = () => {
+      if (sessionExpiryTime) {
+        const now = new Date();
+        if (sessionExpiryTime > now) {
+          const distance = sessionExpiryTime.getTime() - now.getTime();
+          const hours = Math.floor(distance / (1000 * 60 * 60));
+          const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+          setRemainingTime(`expires in ${hours}h ${minutes}m`);
+        } else {
+          setRemainingTime("Session expired");
+          // Optionally redirect or show expired message
+        }
       }
-    });
-
-    // Cleanup function
-    return () => {
-      console.log('Table page: Cleaning up WebSocket event subscription');
-      unsubscribe();
     };
-  }, [sessionId, tableId, restaurantId, queryClient]);
+
+    updateRemainingTime();
+    // Update every 30 seconds instead of every minute
+    const interval = setInterval(updateRemainingTime, 30000);
+
+    return () => clearInterval(interval);
+  }, [sessionExpiryTime, tableId]);
+
 
   return (
     <div className="min-h-screen relative">

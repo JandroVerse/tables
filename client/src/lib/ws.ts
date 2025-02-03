@@ -23,19 +23,21 @@ class WebSocketService {
     private clientType: 'customer' | 'admin' = 'customer';
 
     connect(sessionId: string, type: 'customer' | 'admin' = 'customer') {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        console.log('WebSocket: Already connected');
+      if (!sessionId) {
+        console.error('WebSocket: Cannot connect without sessionId');
         return;
       }
 
+      if (this.ws && this.ws.readyState === WebSocket.OPEN && this.sessionId === sessionId) {
+        console.log('WebSocket: Already connected with same sessionId');
+        return;
+      }
+
+      // Clean up existing connection if any
+      this.disconnect();
+
       this.sessionId = sessionId;
       this.clientType = type;
-
-      // Clear any existing connection timer
-      if (this.connectionTimer) {
-        clearTimeout(this.connectionTimer);
-        this.connectionTimer = null;
-      }
 
       console.log('WebSocket: Connecting with session ID:', this.sessionId, 'type:', type);
 
@@ -89,6 +91,11 @@ class WebSocketService {
     }
 
     private handleReconnect() {
+      if (this.connectionTimer) {
+        clearTimeout(this.connectionTimer);
+        this.connectionTimer = null;
+      }
+
       this.notifyListeners({
         type: 'connection_status',
         status: 'disconnected'
@@ -111,9 +118,11 @@ class WebSocketService {
     }
 
     send(message: WebSocketMessage) {
-      if (!this.ws?.readyState === WebSocket.OPEN) {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         console.error('WebSocket: Cannot send message - connection not open');
-        this.connect(this.sessionId!);
+        if (this.sessionId) {
+          this.connect(this.sessionId, this.clientType);
+        }
         return;
       }
 
@@ -124,7 +133,12 @@ class WebSocketService {
       };
 
       console.log('WebSocket: Sending message:', messageWithSession);
-      this.ws.send(JSON.stringify(messageWithSession));
+      try {
+        this.ws.send(JSON.stringify(messageWithSession));
+      } catch (error) {
+        console.error('WebSocket: Error sending message:', error);
+        this.ws.close();
+      }
     }
 
     subscribe(listener: ServiceRequestListener) {

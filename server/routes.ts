@@ -25,8 +25,12 @@ function broadcastToSession(sessionId: string, message: any, excludeClient?: Web
     console.log(`Found ${clients.size} clients for session ${sessionId}`);
     clients.forEach((client) => {
       if (client !== excludeClient && client.readyState === WebSocket.OPEN) {
-        console.log('Sending to client with type:', clientTypes.get(client)?.type);
-        client.send(messageStr);
+        try {
+          console.log('Sending to client with type:', clientTypes.get(client)?.type);
+          client.send(messageStr);
+        } catch (error) {
+          console.error('Error sending message to client:', error);
+        }
       }
     });
   } else {
@@ -57,7 +61,6 @@ export function registerRoutes(app: Express): Server {
         return false;
       }
 
-      // Store parameters in request for use in connection handler
       (req as any).sessionId = sessionId;
       (req as any).clientType = clientType;
 
@@ -74,7 +77,6 @@ export function registerRoutes(app: Express): Server {
   // Setup authentication
   setupAuth(app);
 
-  // WebSocket setup section
   wss.on("connection", (ws: WebSocket, req: any) => {
     const { sessionId, clientType } = req;
 
@@ -83,13 +85,11 @@ export function registerRoutes(app: Express): Server {
       clientType
     });
 
-    // Add client to session group
     if (!clientsBySession.has(sessionId)) {
       clientsBySession.set(sessionId, new Set());
     }
     clientsBySession.get(sessionId)!.add(ws);
 
-    // Store client info
     clientTypes.set(ws, {
       type: clientType,
       sessionId
@@ -100,13 +100,11 @@ export function registerRoutes(app: Express): Server {
         const data = JSON.parse(message.toString());
         console.log('WebSocket: Received message:', data);
 
-        // Validate session ID in message matches connection
         if (data.sessionId !== sessionId) {
           console.error('WebSocket: Session ID mismatch');
           return;
         }
 
-        // Broadcast to all clients in the same session
         broadcastToSession(sessionId, data, ws);
       } catch (error) {
         console.error("WebSocket: Failed to process message:", error);
@@ -119,7 +117,6 @@ export function registerRoutes(app: Express): Server {
         clientType
       });
 
-      // Remove from session group
       const sessionClients = clientsBySession.get(sessionId);
       if (sessionClients) {
         sessionClients.delete(ws);
@@ -128,12 +125,10 @@ export function registerRoutes(app: Express): Server {
         }
       }
 
-      // Clean up client type
       clientTypes.delete(ws);
     });
   });
 
-  // Restaurant routes
   app.post("/api/restaurants", ensureAuthenticated, async (req, res) => {
     const { name, address, phone } = req.body;
     const [restaurant] = await db.insert(restaurants)
@@ -169,7 +164,6 @@ export function registerRoutes(app: Express): Server {
     res.json(restaurant);
   });
 
-  // Table routes - all within restaurant context
   app.get("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req, res) => {
     const { restaurantId } = req.params;
     const allTables = await db.query.tables.findMany({
@@ -190,7 +184,6 @@ export function registerRoutes(app: Express): Server {
       userId: req.user!.id
     });
 
-    // Verify restaurant ownership
     const [restaurant] = await db.query.restaurants.findMany({
       where: and(
         eq(restaurants.id, Number(restaurantId)),
@@ -209,23 +202,20 @@ export function registerRoutes(app: Express): Server {
     console.log('Restaurant verified:', restaurant);
 
     try {
-      // Get the domain, with fallback and logging
       const domain = process.env.REPLIT_DOMAINS?.split(",")[0] || req.get('host');
       console.log('Using domain for QR:', domain);
 
-      // First create the table
       const [table] = await db.insert(tables)
         .values({
           name,
           restaurantId: Number(restaurantId),
-          qrCode: '', // Temporary empty QR code
+          qrCode: '', 
           position,
         })
         .returning();
 
       console.log('Created table:', table);
 
-      // Generate QR code with full URL - updated to point to the table page
       const tableUrl = `https://${domain}/table/${restaurantId}/${table.id}`;
       console.log('Generating QR code for URL:', tableUrl);
 
@@ -241,7 +231,6 @@ export function registerRoutes(app: Express): Server {
 
       console.log('Generated QR code SVG length:', qrCodeSvg.length);
 
-      // Update the table with the generated QR code
       const [updatedTable] = await db
         .update(tables)
         .set({ qrCode: qrCodeSvg })
@@ -257,7 +246,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add specific endpoint to verify table exists
   app.get("/api/restaurants/:restaurantId/tables/:tableId", async (req, res) => {
     const { restaurantId, tableId } = req.params;
 
@@ -277,7 +265,6 @@ export function registerRoutes(app: Express): Server {
     const { restaurantId, tableId } = req.params;
     const { position } = req.body;
 
-    // Verify restaurant ownership and table existence
     const [restaurant] = await db.query.restaurants.findMany({
       where: and(
         eq(restaurants.id, Number(restaurantId)),
@@ -289,7 +276,6 @@ export function registerRoutes(app: Express): Server {
       return res.status(404).json({ message: "Restaurant not found" });
     }
 
-    // Validate the position object
     if (!position || typeof position !== 'object') {
       return res.status(400).json({ message: "Invalid position data" });
     }
@@ -308,12 +294,10 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Table not found" });
       }
 
-      // Broadcast the update to all connected clients
       broadcastToSession(req.body.sessionId, {
         type: "update_table",
         table: updatedTable
       });
-
 
       res.json(updatedTable);
     } catch (error) {
@@ -325,7 +309,6 @@ export function registerRoutes(app: Express): Server {
   app.delete("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
     const { restaurantId, tableId } = req.params;
 
-    // Verify restaurant ownership
     const [restaurant] = await db.query.restaurants.findMany({
       where: and(
         eq(restaurants.id, Number(restaurantId)),
@@ -358,17 +341,14 @@ export function registerRoutes(app: Express): Server {
     res.json(deletedTable);
   });
 
-  // Session management
   app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req, res) => {
     const { restaurantId, tableId } = req.params;
 
     try {
       console.log(`Creating/retrieving session for table ${tableId} in restaurant ${restaurantId}`);
 
-      // Verify the table belongs to the restaurant
       const table = await verifyTableAccess(Number(restaurantId), Number(tableId));
 
-      // Check for existing active session
       const existingSession = await getActiveTableSession(Number(tableId));
 
       if (existingSession) {
@@ -380,7 +360,6 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
-      // Close any existing active sessions for this table (just in case)
       await db.update(tableSessions)
         .set({ endedAt: new Date() })
         .where(and(
@@ -388,7 +367,6 @@ export function registerRoutes(app: Express): Server {
           eq(tableSessions.endedAt, null)
         ));
 
-      // Create new session with unique ID
       const sessionId = nanoid();
       const [session] = await db.insert(tableSessions)
         .values({
@@ -414,13 +392,11 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Request routes
   app.get("/api/requests", async (req, res) => {
     const { tableId, restaurantId, sessionId } = req.query;
     console.log(`Fetching requests for table ${tableId} in restaurant ${restaurantId}, session ${sessionId}`);
 
     try {
-      // Validate parameters
       const parsedTableId = tableId ? parseInt(tableId as string) : null;
       const parsedRestaurantId = restaurantId ? parseInt(restaurantId as string) : null;
 
@@ -429,7 +405,6 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Invalid parameters" });
       }
 
-      // First verify the table belongs to the restaurant
       const [table] = await db.query.tables.findMany({
         where: and(
           eq(tables.id, parsedTableId),
@@ -442,7 +417,6 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Table not found in this restaurant" });
       }
 
-      // Now get requests for this table and session
       const allRequests = await db.query.requests.findMany({
         where: and(
           eq(requests.tableId, parsedTableId),
@@ -477,7 +451,6 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // Verify the table belongs to the specified restaurant
       const [table] = await db.query.tables.findMany({
         where: and(
           eq(tables.id, Number(tableId)),
@@ -492,7 +465,6 @@ export function registerRoutes(app: Express): Server {
 
       console.log(`Verified table ${tableId} belongs to restaurant ${restaurantId}`);
 
-      // Create the request
       const [request] = await db.insert(requests)
         .values({
           tableId: Number(tableId),
@@ -504,7 +476,6 @@ export function registerRoutes(app: Express): Server {
 
       console.log(`Created request ${request.id} for table ${tableId}`);
 
-      // Broadcast to WebSocket clients
       broadcastToSession(sessionId, { type: "new_request", request });
 
       res.json(request);
@@ -535,7 +506,6 @@ export function registerRoutes(app: Express): Server {
     res.json(request);
   });
 
-  // Feedback routes
   app.post("/api/feedback", async (req, res) => {
     const { requestId, rating, comment } = req.body;
 
