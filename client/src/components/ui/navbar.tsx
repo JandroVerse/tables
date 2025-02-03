@@ -20,19 +20,27 @@ export function Navbar() {
             ? `${currentRestaurant.name} Dashboard`
             : "Dashboard"}
         </div>
-        <Button 
-          variant="ghost" 
-          size="sm"
-          onClick={() => logoutMutation.mutate()}
-          className="hover:bg-destructive/10"
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            logoutMutation.mutate();
+          }}
         >
-          {logoutMutation.isPending ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <LogOut className="h-4 w-4 mr-2" />
-          )}
-          {logoutMutation.isPending ? "Logging out..." : "Logout"}
-        </Button>
+          <Button 
+            type="submit"
+            variant="ghost" 
+            size="sm"
+            disabled={logoutMutation.isPending}
+            className="hover:bg-destructive/10"
+          >
+            {logoutMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4 mr-2" />
+            )}
+            {logoutMutation.isPending ? "Logging out..." : "Logout"}
+          </Button>
+        </form>
       </div>
     </nav>
   );
