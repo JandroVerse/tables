@@ -2,11 +2,12 @@ import { tables } from "@db/schema";
 import { eq } from "drizzle-orm";
 import QRCode from "qrcode";
 import { db } from "@db";
+import { nanoid } from "nanoid";
 
-async function generateQRCode(restaurantId: number, tableId: number) {
+async function generateQRCode(token: string) {
   // Get the base URL from environment or use a default for development
   const baseUrl = process.env.BASE_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
-  const tableUrl = `${baseUrl}/table/${restaurantId}/${tableId}`;
+  const tableUrl = `${baseUrl}/table/${token}`;
 
   try {
     return await QRCode.toString(tableUrl, {
@@ -21,26 +22,23 @@ async function generateQRCode(restaurantId: number, tableId: number) {
 }
 
 export async function createTable(restaurantId: number, name: string, position: any) {
-  // First create the table to get its ID
+  // Generate a unique token for the table
+  const token = nanoid();
+
+  // Generate QR code with the token
+  const qrCode = await generateQRCode(token);
+
+  // Create the table with token
   const [table] = await db
     .insert(tables)
     .values({
       restaurantId,
       name,
       position,
-      qrCode: '', // Temporary empty QR code
+      token,
+      qrCode,
     })
     .returning();
 
-  // Generate QR code using the new table's ID
-  const qrCode = await generateQRCode(restaurantId, table.id);
-
-  // Update the table with the QR code
-  const [updatedTable] = await db
-    .update(tables)
-    .set({ qrCode })
-    .where(eq(tables.id, table.id))
-    .returning();
-
-  return updatedTable;
+  return table;
 }

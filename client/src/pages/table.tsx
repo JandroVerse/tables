@@ -27,7 +27,7 @@ import { Plus, Minus, GlassWater, Bell, Receipt, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect, useState } from "react";
-import type { Request } from "@db/schema";
+import type { Request, Table } from "@db/schema";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedBackground } from "@/components/animated-background";
@@ -56,105 +56,109 @@ export default function TablePage() {
   const queryClient = useQueryClient();
   const params = useParams();
 
-  // Ensure we have valid IDs
-  const restaurantId = Number(params.restaurantId);
-  const tableId = Number(params.tableId);
+  // Support both URL formats: /table/:token and /table/:restaurantId/:tableId
+  const token = params.token;
+  const restaurantId = params.restaurantId ? Number(params.restaurantId) : undefined;
+  const tableId = params.tableId ? Number(params.tableId) : undefined;
 
   const [otherRequestNote, setOtherRequestNote] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [isWaterDialogOpen, setIsWaterDialogOpen] = useState(false);
   const [waterCount, setWaterCount] = useState(1);
   const [isValidating, setIsValidating] = useState(true);
   const [isValid, setIsValid] = useState(false);
-  const [tableData, setTableData] = useState<any>(null);
+  const [tableData, setTableData] = useState<Table | null>(null);
 
-  // Initialize session and validate table
+  // Initialize token/session and validate table
   useEffect(() => {
-    if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
-      console.error('Invalid table or restaurant ID:', { restaurantId, tableId });
+    if (!token && (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId))) {
+      console.error('Invalid table parameters:', { token, restaurantId, tableId });
       setIsValid(false);
       setIsValidating(false);
       return;
     }
 
-    const storedSession = localStorage.getItem(`table_session_${tableId}`);
-    let existingSessionId = null;
+    // For token-based auth
+    if (token) {
+      console.log(`Validating table token: ${token}`);
+      localStorage.setItem('tableToken', token);
 
-    if (storedSession) {
-      try {
-        const session = JSON.parse(storedSession);
-        if (new Date(session.expiry) > new Date()) {
-          existingSessionId = session.id;
-          setSessionId(existingSessionId);
-          // Store session ID globally for WebSocket
-          localStorage.setItem('sessionId', session.id);
-        } else {
+      fetch(`/api/tables/${token}`)
+        .then(async (res) => {
+          const text = await res.text();
+          console.log('Raw API response:', text);
+
+          if (!res.ok) {
+            throw new Error(text || "Invalid table token");
+          }
+
+          const data = JSON.parse(text);
+          console.log('Parsed table data:', data);
+          setTableData(data);
+          setIsValid(true);
+        })
+        .catch((error) => {
+          console.error("Failed to verify table:", error);
+          toast({
+            title: "Error",
+            description: error.message || "This table appears to be invalid or no longer exists.",
+            variant: "destructive",
+          });
+          setIsValid(false);
+        })
+        .finally(() => {
+          setIsValidating(false);
+        });
+    } 
+    // For session-based auth
+    else {
+      const storedSession = localStorage.getItem(`table_session_${tableId}`);
+      let existingSessionId = null;
+
+      if (storedSession) {
+        try {
+          const session = JSON.parse(storedSession);
+          if (new Date(session.expiry) > new Date()) {
+            existingSessionId = session.id;
+            // Store session ID globally for WebSocket
+            localStorage.setItem('sessionId', session.id);
+          } else {
+            localStorage.removeItem(`table_session_${tableId}`);
+            localStorage.removeItem('sessionId');
+          }
+        } catch (e) {
           localStorage.removeItem(`table_session_${tableId}`);
           localStorage.removeItem('sessionId');
         }
-      } catch (e) {
-        localStorage.removeItem(`table_session_${tableId}`);
-        localStorage.removeItem('sessionId');
       }
-    }
 
-    console.log(`Validating table ${tableId} for restaurant ${restaurantId}`);
-
-    fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`, {
-      headers: {
-        'X-Session-ID': existingSessionId || ''
-      }
-    })
-      .then(async (res) => {
-        const text = await res.text();
-        console.log('Raw API response:', text);
-
-        if (!res.ok) {
-          throw new Error(text || "Invalid table");
-        }
-
-        const data = JSON.parse(text);
-        console.log('Parsed table data:', data);
-
-        if (!data || data.restaurantId !== restaurantId) {
-          throw new Error("Table does not belong to this restaurant");
-        }
-
-        setTableData(data);
-        setIsValid(true);
-
-        if (!existingSessionId) {
-          return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
-        }
-        return new Response(JSON.stringify({ sessionId: existingSessionId }));
-      })
-      .then((res) => res.json())
-      .then((session) => {
-        console.log('Session data:', session);
-        setSessionId(session.sessionId);
-        localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
-          id: session.sessionId,
-          expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-        }));
-         // Store session ID globally for WebSocket
-        localStorage.setItem('sessionId', session.sessionId);
-        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
-      })
-      .catch((error) => {
-        console.error("Failed to verify table or create session:", error);
-        toast({
-          title: "Error",
-          description: error.message || "This table appears to be invalid or no longer exists.",
-          variant: "destructive",
+      // Create or verify session
+      apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`)
+        .then(res => res.json())
+        .then(session => {
+          localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
+            id: session.sessionId,
+            expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+          }));
+          localStorage.setItem('sessionId', session.sessionId);
+          setTableData(session);
+          setIsValid(true);
+        })
+        .catch(error => {
+          console.error("Failed to create/verify session:", error);
+          toast({
+            title: "Error",
+            description: error.message || "Failed to initialize table session.",
+            variant: "destructive",
+          });
+          setIsValid(false);
+        })
+        .finally(() => {
+          setIsValidating(false);
         });
-        setIsValid(false);
-      })
-      .finally(() => {
-        setIsValidating(false);
-      });
-  }, [restaurantId, tableId]);
+    }
+  }, [token, restaurantId, tableId]);
 
   useEffect(() => {
     wsService.connect();
@@ -163,17 +167,20 @@ export default function TablePage() {
     const unsubscribe = wsService.subscribe((data) => {
       console.log('Table page: Received WebSocket event', data);
 
+      if (!tableData) return;
+
       switch (data.type) {
         case 'new_request':
         case 'update_request':
-          console.log('Table page: Invalidating requests query due to WebSocket event', data);
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+          if (data.request.tableId === tableData.id) {
+            console.log('Table page: Invalidating requests query due to WebSocket event', data);
+            queryClient.invalidateQueries({ queryKey: ["/api/requests", token || `${restaurantId}/${tableId}`] });
+          }
           break;
         case 'connection_status':
           console.log('Table page: WebSocket connection status:', data.status);
           if (data.status === 'connected') {
-            // Refresh data when reconnected
-            queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+              queryClient.invalidateQueries({ queryKey: ["/api/requests", token || `${restaurantId}/${tableId}`] });
           }
           break;
         default:
@@ -185,29 +192,30 @@ export default function TablePage() {
       console.log('Table page: Unsubscribing from WebSocket service');
       unsubscribe();
     };
-  }, [tableId, queryClient, restaurantId]);
+  }, [token, queryClient, tableData, restaurantId, tableId]);
 
   const { data: requests = [] } = useQuery<Request[]>({
-    queryKey: ["/api/requests", tableId, restaurantId],
+    queryKey: ["/api/requests", token || `${restaurantId}/${tableId}`],
     queryFn: async () => {
-      if (!sessionId) return [];
-      const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`);
+      if (!tableData) return [];
+
+      const queryParams = token 
+        ? `token=${token}`
+        : `tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${localStorage.getItem('sessionId')}`;
+
+      const res = await fetch(`/api/requests?${queryParams}`);
       if (!res.ok) throw new Error("Failed to fetch requests");
-      const data = await res.json();
-      return data.map((request: any) => ({
-        ...request,
-        tableName: tableData?.name
-      }));
+      return res.json();
     },
-    enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData && !!restaurantId && !isNaN(restaurantId),
+    enabled: !!tableData && (!!token || (!!restaurantId && !!tableId)),
   });
 
   const handleWaterRequest = () => {
     console.log('Water request initiated:', {
       waterCount,
+      token,
       tableId,
-      restaurantId,
-      sessionId
+      restaurantId
     });
 
     createRequest({
@@ -217,51 +225,37 @@ export default function TablePage() {
   };
 
   const handleWaiterRequest = () => {
-    console.log('Waiter request initiated:', {
-      tableId,
-      restaurantId,
-      sessionId
-    });
-
+    console.log('Waiter request initiated:', { token, tableId, restaurantId });
     createRequest({ type: "waiter" });
   };
 
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
-      console.log('Creating request: Starting mutation', { type, notes, tableId, restaurantId, sessionId });
+      console.log('Creating request: Starting mutation', { type, notes, token, tableId, restaurantId });
 
-      if (!sessionId) {
-        console.error('Creating request: No active session');
-        throw new Error("No active session");
+      if (!token && (!restaurantId || !tableId)) {
+        throw new Error("Invalid table parameters");
       }
 
-      if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
-        console.error('Creating request: Invalid table or restaurant', { restaurantId, tableId });
-        throw new Error("Invalid table or restaurant");
-      }
-
-      const requestData = {
-        tableId: Number(tableId),
-        restaurantId: Number(restaurantId),
-        sessionId,
-        type,
-        notes,
-      };
+      const requestData = token
+        ? { token, type, notes }
+        : {
+            tableId,
+            restaurantId,
+            sessionId: localStorage.getItem('sessionId'),
+            type,
+            notes,
+          };
 
       console.log('Creating request: Sending request with data', requestData);
 
       try {
         const response = await apiRequest("POST", "/api/requests", requestData);
-
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('Creating request: Request failed', errorText);
           throw new Error(errorText || "Failed to create request");
         }
-
-        const data = await response.json();
-        console.log('Creating request: Request successful', data);
-        return data;
+        return response.json();
       } catch (error) {
         console.error('Creating request: Request error', error);
         throw error;
@@ -269,7 +263,7 @@ export default function TablePage() {
     },
     onSuccess: (data) => {
       console.log('Creating request: Mutation succeeded', data);
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", token || `${restaurantId}/${tableId}`] });
       setOtherRequestNote("");
       setIsDialogOpen(false);
       toast({
@@ -280,8 +274,7 @@ export default function TablePage() {
       // Send WebSocket notification with full request data
       const wsMessage = {
         type: "new_request" as const,
-        tableId,
-        restaurantId,
+        token,
         request: data
       };
       console.log('Creating request: Sending WebSocket notification', wsMessage);
@@ -302,7 +295,7 @@ export default function TablePage() {
       return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/requests", token || `${restaurantId}/${tableId}`] });
       toast({
         title: "Request cancelled",
         description: "Your request has been cancelled successfully.",
@@ -318,7 +311,7 @@ export default function TablePage() {
     },
   });
 
-  if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
+  if (!token && (!restaurantId || !tableId)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card>
@@ -363,7 +356,7 @@ export default function TablePage() {
     );
   }
 
-    if (!sessionId) return <div>Initializing table session...</div>;
+  if (!tableData) return <div>Loading table data...</div>;
 
   const hasActiveRequest = (type: string) => {
     return requests.some(

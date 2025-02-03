@@ -4,6 +4,7 @@ interface WebSocketMessage {
   type: 'new_request' | 'update_request' | 'connection_status';
   tableId?: number;
   restaurantId?: number;
+  token?: string;
   request?: any;
   status?: 'connected' | 'disconnected' | 'reconnecting';
 }
@@ -24,12 +25,19 @@ class WebSocketService {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
+
+    // Support both authentication methods
     const sessionId = localStorage.getItem('sessionId');
+    const tableToken = localStorage.getItem('tableToken');
+    const authQuery = tableToken 
+      ? `?token=${tableToken}`
+      : sessionId 
+      ? `?sessionId=${sessionId}` 
+      : '';
 
-    console.log('WebSocket: Attempting to connect to', `${protocol}//${host}/ws`);
+    console.log('WebSocket: Attempting to connect to', `${protocol}//${host}/ws${authQuery}`);
 
-    // Include session ID in the WebSocket URL
-    this.ws = new WebSocket(`${protocol}//${host}/ws${sessionId ? `?sessionId=${sessionId}` : ''}`);
+    this.ws = new WebSocket(`${protocol}//${host}/ws${authQuery}`);
 
     this.ws.onopen = () => {
       console.log('WebSocket: Connection established');
@@ -78,20 +86,26 @@ class WebSocketService {
   }
 
   send(message: WebSocketMessage) {
-    if (!message.tableId || !message.restaurantId) {
+    // Ensure we have either token or table/restaurant IDs
+    if ((!message.token && (!message.tableId || !message.restaurantId))) {
       console.error('WebSocket: Invalid message - missing required parameters', message);
       return;
     }
 
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('WebSocket: Sending message', message);
-      // Include session ID in the message payload
+
+      // Include auth info in message payload
       const sessionId = localStorage.getItem('sessionId');
-      const messageWithSession = {
+      const tableToken = localStorage.getItem('tableToken');
+
+      const messageWithAuth = {
         ...message,
-        sessionId
+        sessionId,
+        token: tableToken || message.token
       };
-      this.ws.send(JSON.stringify(messageWithSession));
+
+      this.ws.send(JSON.stringify(messageWithAuth));
     } else {
       console.error('WebSocket: Cannot send message - connection not open', {
         readyState: this.ws?.readyState,
