@@ -16,7 +16,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
 import type { Request, Table } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -39,7 +38,6 @@ const columnVariants = {
 export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [newTableName, setNewTableName] = useState("");
 
   useEffect(() => {
     wsService.connect();
@@ -57,19 +55,6 @@ export default function AdminPage() {
 
   const { data: tables = [] } = useQuery<Table[]>({
     queryKey: ["/api/tables"],
-  });
-
-  const { mutate: createTable } = useMutation({
-    mutationFn: async (name: string) => {
-      return apiRequest("POST", "/api/tables", { name });
-    },
-    onSuccess: () => {
-      toast({
-        title: "Table created",
-        description: "The table has been created successfully.",
-      });
-      setNewTableName("");
-    },
   });
 
   const { mutate: updateRequest } = useMutation({
@@ -146,24 +131,6 @@ export default function AdminPage() {
         </div>
 
         <FloorPlanEditor />
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Create New Table</CardTitle>
-          </CardHeader>
-          <CardContent className="flex gap-4">
-            <Input
-              placeholder="Table name (e.g., Table 1)"
-              value={newTableName}
-              onChange={(e) => setNewTableName(e.target.value)}
-            />
-            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-              <Button onClick={() => newTableName && createTable(newTableName)}>
-                Create Table
-              </Button>
-            </motion.div>
-          </CardContent>
-        </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {statuses.map((status) => (
