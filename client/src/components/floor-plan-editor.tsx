@@ -59,7 +59,7 @@ const RequestIndicator = ({ type }: { type: string }) => {
     water: <GlassWater className="h-5 w-5 text-blue-500" />,
     waiter: <Bell className="h-5 w-5 text-purple-500" />,
     check: <Receipt className="h-5 w-5 text-emerald-500" />,
-    other: <MessageSquare className="h-5 w-5 text-gray-500" />
+    other: <MessageSquare className="h-5 w-5 text-gray-500" />,
   };
 
   return icons[type as keyof typeof icons] || icons.other;
@@ -75,41 +75,49 @@ const DraggableTable = ({
   activeRequests,
   editMode,
 }: DraggableTableProps) => {
-  const [size, setSize] = useState({ 
-    width: table.position.width || 100, 
-    height: table.position.height || 100 
+  const [size, setSize] = useState({
+    width: table.position.width || 100,
+    height: table.position.height || 100,
   });
-  const [position, setPosition] = useState({ 
-    x: table.position.x || 0, 
-    y: table.position.y || 0 
+  const [position, setPosition] = useState({
+    x: table.position.x || 0,
+    y: table.position.y || 0,
   });
   const [resizing, setResizing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [startSize, setStartSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
-    setSize({ 
-      width: table.position.width || 100, 
-      height: table.position.height || 100 
+    setSize({
+      width: table.position.width || 100,
+      height: table.position.height || 100,
     });
-    setPosition({ 
-      x: table.position.x || 0, 
-      y: table.position.y || 0 
+    setPosition({
+      x: table.position.x || 0,
+      y: table.position.y || 0,
     });
   }, [table.position]);
 
-  const handleResizeStart = (e: React.MouseEvent) => {
+  const handleResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
     if (!editMode) return;
     e.stopPropagation();
+    e.preventDefault();
+
     setResizing(true);
-    setStartPos({ x: e.clientX, y: e.clientY });
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+
+    setStartPos({ x: clientX, y: clientY });
     setStartSize({ width: size.width, height: size.height });
 
-    const onMouseMove = (e: MouseEvent) => {
+    const handleMove = (e: MouseEvent | TouchEvent) => {
       if (!resizing) return;
 
-      const deltaX = e.clientX - startPos.x;
-      const deltaY = e.clientY - startPos.y;
+      const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+
+      const deltaX = clientX - startPos.x;
+      const deltaY = clientY - startPos.y;
 
       const newWidth = Math.max(80, Math.min(300, startSize.width + deltaX));
       const newHeight = Math.max(80, Math.min(300, startSize.height + deltaY));
@@ -117,15 +125,21 @@ const DraggableTable = ({
       setSize({ width: newWidth, height: newHeight });
     };
 
-    const onMouseUp = () => {
+    const handleEnd = () => {
+      if (!resizing) return;
       setResizing(false);
       onResize(table.id, size);
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleEnd);
     };
 
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleMove);
+    window.addEventListener('touchend', handleEnd);
   };
 
   return (
@@ -146,10 +160,13 @@ const DraggableTable = ({
           width: size.width,
           height: size.height,
           touchAction: 'none',
+          userSelect: 'none',
         }}
         onClick={(e) => {
-          e.stopPropagation();
-          onClick();
+          if (!resizing) {
+            e.stopPropagation();
+            onClick();
+          }
         }}
       >
         {/* Table content */}
@@ -157,15 +174,17 @@ const DraggableTable = ({
           <span className="font-medium text-gray-800">{table.name}</span>
         </div>
 
-        {/* Resize handle */}
+        {/* Resize handle - made larger and more visible */}
         {editMode && (
           <div
-            className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize bg-primary/20 rounded-bl"
+            className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize bg-primary/20 hover:bg-primary/30 rounded-bl transition-colors"
             onMouseDown={handleResizeStart}
+            onTouchStart={handleResizeStart}
+            style={{ touchAction: 'none' }}
           />
         )}
 
-        {/* Delete button and request indicators remain the same */}
+        {/* Delete button and other UI elements remain unchanged */}
         {editMode && (
           <div className="absolute -top-8 left-1/2 -translate-x-1/2">
             <AlertDialog>
@@ -196,6 +215,7 @@ const DraggableTable = ({
           </div>
         )}
 
+        {/* Request indicators */}
         <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
           <div className="flex gap-2">
             <AnimatePresence>
@@ -318,9 +338,9 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
   const getActiveRequests = (tableId: number) => {
     return requests.filter(
-      (r) => r.tableId === tableId && 
-      r.status !== "completed" && 
-      r.status !== "cleared"
+      (r) => r.tableId === tableId &&
+        r.status !== "completed" &&
+        r.status !== "cleared"
     );
   };
 
@@ -338,10 +358,10 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Floor Plan Editor</CardTitle>
         <div className="flex items-center gap-2">
-          <Checkbox 
-            id="edit-mode" 
-            checked={editMode} 
-            onCheckedChange={(checked) => setEditMode(checked as boolean)} 
+          <Checkbox
+            id="edit-mode"
+            checked={editMode}
+            onCheckedChange={(checked) => setEditMode(checked as boolean)}
           />
           <Label htmlFor="edit-mode" className="font-medium text-sm">
             Edit Mode
