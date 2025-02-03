@@ -24,12 +24,15 @@ import {
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import { GlassWater, Bell, Receipt, MessageSquare, Trash2 } from "lucide-react";
+import { GlassWater, Bell, Receipt, MessageSquare, Trash2, Grid } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Table, Request } from "@db/schema";
 import { motion, AnimatePresence } from "framer-motion";
 import { QuickRequestPreview } from "./quick-request-preview";
+
+const GRID_SIZE = 20;
+const GRID_COLOR = "rgba(0, 0, 0, 0.1)";
 
 interface TablePosition {
   x: number;
@@ -65,6 +68,26 @@ const RequestIndicator = ({ type }: { type: string }) => {
   return icons[type as keyof typeof icons] || icons.other;
 };
 
+const GridBackground = () => {
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        backgroundImage: `
+          linear-gradient(to right, ${GRID_COLOR} 1px, transparent 1px),
+          linear-gradient(to bottom, ${GRID_COLOR} 1px, transparent 1px)
+        `,
+        backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
+      }}
+    />
+  );
+};
+
+const snapToGrid = (value: number): number => {
+  return Math.round(value / GRID_SIZE) * GRID_SIZE;
+};
+
+
 const DraggableTable = ({
   table,
   onDragStop,
@@ -80,15 +103,17 @@ const DraggableTable = ({
     height: table.position.height || 100,
   });
   const [position, setPosition] = useState({
-    x: table.position.x || 0,
-    y: table.position.y || 0,
+    x: snapToGrid(table.position.x || 0),
+    y: snapToGrid(table.position.y || 0),
   });
   const [resizing, setResizing] = useState(false);
+  const [resizeDirection, setResizeDirection] = useState<string | null>(null);
 
   const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     if (!editMode) return;
     e.stopPropagation();
     setResizing(true);
+    setResizeDirection(direction);
 
     const startX = e.clientX;
     const startY = e.clientY;
@@ -96,23 +121,41 @@ const DraggableTable = ({
     const startHeight = size.height;
 
     const handleMove = (e: MouseEvent) => {
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
+      const dx = snapToGrid(e.clientX - startX);
+      const dy = snapToGrid(e.clientY - startY);
 
-      // Simple resize logic - just add the mouse movement to the dimensions
-      let newWidth = direction.includes('right')
-        ? Math.min(300, Math.max(80, startWidth + dx))
-        : Math.min(300, Math.max(80, startWidth - dx));
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+      let newX = position.x;
+      let newY = position.y;
 
-      let newHeight = direction.includes('bottom')
-        ? Math.min(300, Math.max(80, startHeight + dy))
-        : Math.min(300, Math.max(80, startHeight - dy));
+      if (direction.includes('right')) {
+        newWidth = Math.min(400, Math.max(80, startWidth + dx));
+      } else if (direction.includes('left')) {
+        const possibleWidth = Math.min(400, Math.max(80, startWidth - dx));
+        if (possibleWidth !== startWidth) {
+          newWidth = possibleWidth;
+          newX = position.x + (startWidth - possibleWidth);
+        }
+      }
+
+      if (direction.includes('bottom')) {
+        newHeight = Math.min(400, Math.max(80, startHeight + dy));
+      } else if (direction.includes('top')) {
+        const possibleHeight = Math.min(400, Math.max(80, startHeight - dy));
+        if (possibleHeight !== startHeight) {
+          newHeight = possibleHeight;
+          newY = position.y + (startHeight - possibleHeight);
+        }
+      }
 
       setSize({ width: newWidth, height: newHeight });
+      setPosition({ x: newX, y: newY });
     };
 
     const handleEnd = () => {
       setResizing(false);
+      setResizeDirection(null);
       onResize(table.id, size);
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleEnd);
@@ -122,12 +165,23 @@ const DraggableTable = ({
     window.addEventListener('mouseup', handleEnd);
   };
 
+  const resizeHandleClass = "absolute w-4 h-4 bg-primary rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer hover:scale-110 transition-transform";
+
   return (
     <Draggable
       position={position}
-      onDrag={(e, data) => setPosition({ x: data.x, y: data.y })}
-      onStop={(e, data) => onDragStop(table.id, data)}
+      onDrag={(e, data) => {
+        const snappedX = snapToGrid(data.x);
+        const snappedY = snapToGrid(data.y);
+        setPosition({ x: snappedX, y: snappedY });
+      }}
+      onStop={(e, data) => {
+        const snappedX = snapToGrid(data.x);
+        const snappedY = snapToGrid(data.y);
+        onDragStop(table.id, { x: snappedX, y: snappedY });
+      }}
       disabled={resizing || !editMode}
+      grid={[GRID_SIZE, GRID_SIZE]}
       bounds="parent"
     >
       <div
@@ -152,25 +206,50 @@ const DraggableTable = ({
           <span className="font-medium text-gray-800">{table.name}</span>
         </div>
 
-        {/* Resize handles */}
+        {/* Resize handles with improved visual feedback */}
         {editMode && (
           <>
-            <div
-              className="absolute -top-1 -right-1 w-3 h-3 cursor-ne-resize rounded-full bg-primary hover:opacity-100 opacity-50"
-              onMouseDown={(e) => handleResizeStart(e, 'right-top')}
-            />
-            <div
-              className="absolute -bottom-1 -right-1 w-3 h-3 cursor-se-resize rounded-full bg-primary hover:opacity-100 opacity-50"
-              onMouseDown={(e) => handleResizeStart(e, 'right-bottom')}
-            />
-            <div
-              className="absolute -bottom-1 -left-1 w-3 h-3 cursor-sw-resize rounded-full bg-primary hover:opacity-100 opacity-50"
-              onMouseDown={(e) => handleResizeStart(e, 'left-bottom')}
-            />
-            <div
-              className="absolute -top-1 -left-1 w-3 h-3 cursor-nw-resize rounded-full bg-primary hover:opacity-100 opacity-50"
-              onMouseDown={(e) => handleResizeStart(e, 'left-top')}
-            />
+            {['top', 'right', 'bottom', 'left', 'topright', 'bottomright', 'bottomleft', 'topleft'].map((direction) => {
+              const getPosition = () => {
+                const positions = {
+                  top: { left: '50%', top: '0%' },
+                  right: { left: '100%', top: '50%' },
+                  bottom: { left: '50%', top: '100%' },
+                  left: { left: '0%', top: '50%' },
+                  topright: { left: '100%', top: '0%' },
+                  bottomright: { left: '100%', top: '100%' },
+                  bottomleft: { left: '0%', top: '100%' },
+                  topleft: { left: '0%', top: '0%' },
+                };
+                return positions[direction as keyof typeof positions];
+              };
+
+              const getCursor = () => {
+                const cursors = {
+                  top: 'n-resize',
+                  right: 'e-resize',
+                  bottom: 's-resize',
+                  left: 'w-resize',
+                  topright: 'ne-resize',
+                  bottomright: 'se-resize',
+                  bottomleft: 'sw-resize',
+                  topleft: 'nw-resize',
+                };
+                return cursors[direction as keyof typeof cursors];
+              };
+
+              return (
+                <div
+                  key={direction}
+                  className={`${resizeHandleClass} ${resizeDirection === direction ? 'scale-125 bg-primary-dark' : ''}`}
+                  style={{
+                    ...getPosition(),
+                    cursor: getCursor(),
+                  }}
+                  onMouseDown={(e) => handleResizeStart(e, direction)}
+                />
+              );
+            })}
           </>
         )}
 
@@ -260,6 +339,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   const [selectedShape, setSelectedShape] = useState<"square" | "round">("square");
   const [showRequestPreview, setShowRequestPreview] = useState(false);
   const [editMode, setEditMode] = useState(false);
+    const [showGrid, setShowGrid] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
@@ -380,37 +460,46 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Floor Plan Editor</CardTitle>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="edit-mode"
-            checked={editMode}
-            onCheckedChange={(checked) => {
-              setEditMode(checked as boolean);
-              // When turning off edit mode, save all table positions and dimensions
-              if (!checked && tables.length > 0) {
-                // Save each table's current position and dimensions
-                tables.forEach(table => {
-                  const tableElement = document.querySelector(`[data-table-id="${table.id}"]`);
-                  if (tableElement) {
-                    const rect = tableElement.getBoundingClientRect();
-                    updateTablePosition({
-                      id: table.id,
-                      position: {
-                        ...table.position,
-                        x: parseFloat(tableElement.style.transform.split('translate(')[1]),
-                        y: parseFloat(tableElement.style.transform.split(', ')[1]),
-                        width: rect.width,
-                        height: rect.height
-                      }
-                    });
-                  }
-                });
-              }
-            }}
-          />
-          <Label htmlFor="edit-mode" className="font-medium text-sm">
-            Edit Mode
-          </Label>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="edit-mode"
+              checked={editMode}
+              onCheckedChange={(checked) => {
+                setEditMode(checked as boolean);
+                if (!checked && tables.length > 0) {
+                  tables.forEach(table => {
+                    const tableElement = document.querySelector(`[data-table-id="${table.id}"]`);
+                    if (tableElement) {
+                      const rect = tableElement.getBoundingClientRect();
+                      updateTablePosition({
+                        id: table.id,
+                        position: {
+                          ...table.position,
+                          x: snapToGrid(parseFloat(tableElement.style.transform.split('translate(')[1])),
+                          y: snapToGrid(parseFloat(tableElement.style.transform.split(', ')[1])),
+                          width: snapToGrid(rect.width),
+                          height: snapToGrid(rect.height)
+                        }
+                      });
+                    }
+                  });
+                }
+              }}
+            />
+            <Label htmlFor="edit-mode" className="font-medium text-sm">
+              Edit Mode
+            </Label>
+          </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+              onClick={() => setShowGrid(!showGrid)}
+            >
+              <Grid className="h-4 w-4" />
+              {showGrid ? "Hide Grid" : "Show Grid"}
+            </Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -444,6 +533,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
               className="relative h-[600px] border rounded-lg bg-gray-50"
               onClick={() => setSelectedTable(null)}
             >
+                {showGrid && <GridBackground />}
               {tables.map((table) => (
                 <DraggableTable
                   key={table.id}
