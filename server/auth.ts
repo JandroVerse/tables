@@ -37,12 +37,21 @@ async function getUserByUsername(username: string) {
 }
 
 export function setupAuth(app: Express) {
-  const store = new PostgresSessionStore({ pool, createTableIfMissing: true });
+  const store = new PostgresSessionStore({ 
+    pool, 
+    createTableIfMissing: true,
+    ttl: 24 * 60 * 60 // Session expires in 24 hours
+  });
+
   const sessionSettings: session.SessionOptions = {
     secret: process.env.REPL_ID!,
     resave: false,
     saveUninitialized: false,
     store,
+    cookie: {
+      secure: app.get("env") === "production",
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    }
   };
 
   if (app.get("env") === "production") {
@@ -55,24 +64,35 @@ export function setupAuth(app: Express) {
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
-      const [user] = await getUserByUsername(username);
-      if (!user || !(await comparePasswords(password, user.password))) {
-        return done(null, false);
-      } else {
-        return done(null, user);
+      try {
+        const [user] = await getUserByUsername(username);
+        if (!user || !(await comparePasswords(password, user.password))) {
+          return done(null, false);
+        } else {
+          return done(null, user);
+        }
+      } catch (error) {
+        return done(error);
       }
     }),
   );
 
   passport.serializeUser((user, done) => done(null, user.id));
   passport.deserializeUser(async (id: number, done) => {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, id))
-      .limit(1);
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
 
-    done(null, user);
+      if (!user) {
+        return done(null, false);
+      }
+      done(null, user);
+    } catch (error) {
+      done(error);
+    }
   });
 
   app.post("/api/register", async (req, res, next) => {
@@ -106,8 +126,11 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/logout", (req, res, next) => {
-    req.logout((err) => {
+    // Destroy the session completely
+    req.session.destroy((err) => {
       if (err) return next(err);
+      // Clear the client-side session cookie
+      res.clearCookie('connect.sid');
       res.sendStatus(200);
     });
   });
