@@ -98,11 +98,11 @@ export default function QRPage() {
                   <h3 className="font-medium mb-2">{table.name}</h3>
                   {table.qrCode ? (
                     <div 
-                      className="w-full mb-4 p-4 bg-white rounded-lg shadow-sm"
+                      className="w-full aspect-square mb-4 p-4 bg-white rounded-lg shadow-sm flex items-center justify-center"
                       dangerouslySetInnerHTML={{ __html: table.qrCode }}
                     />
                   ) : (
-                    <div className="w-full mb-4 p-4 bg-gray-100 rounded-lg text-center text-gray-500">
+                    <div className="w-full aspect-square mb-4 p-4 bg-gray-100 rounded-lg text-center text-gray-500 flex items-center justify-center">
                       QR Code not available
                     </div>
                   )}
