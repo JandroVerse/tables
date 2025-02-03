@@ -84,66 +84,36 @@ const DraggableTable = ({
     y: table.position.y || 0,
   });
   const [resizing, setResizing] = useState(false);
-  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
 
-  const handleResizeStart = (e: React.MouseEvent, handle: string) => {
+  const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     if (!editMode) return;
     e.stopPropagation();
     setResizing(true);
-    setResizeHandle(handle);
 
     const startX = e.clientX;
     const startY = e.clientY;
     const startWidth = size.width;
     const startHeight = size.height;
-    const startPosX = position.x;
-    const startPosY = position.y;
 
     const handleMove = (e: MouseEvent) => {
-      if (!resizing) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      let newWidth = startWidth;
-      let newHeight = startHeight;
-      let newX = startPosX;
-      let newY = startPosY;
+      // Simple resize logic - just add the mouse movement to the dimensions
+      let newWidth = direction.includes('right') 
+        ? Math.min(300, Math.max(80, startWidth + dx))
+        : Math.min(300, Math.max(80, startWidth - dx));
 
-      // Immediately update size and position based on mouse movement
-      switch (handle) {
-        case 'top-left':
-          newWidth = Math.min(300, Math.max(80, startWidth - dx));
-          newHeight = Math.min(300, Math.max(80, startHeight - dy));
-          newX = startPosX + (startWidth - newWidth);
-          newY = startPosY + (startHeight - newHeight);
-          break;
-        case 'top-right':
-          newWidth = Math.min(300, Math.max(80, startWidth + dx));
-          newHeight = Math.min(300, Math.max(80, startHeight - dy));
-          newY = startPosY + (startHeight - newHeight);
-          break;
-        case 'bottom-left':
-          newWidth = Math.min(300, Math.max(80, startWidth - dx));
-          newHeight = Math.min(300, Math.max(80, startHeight + dy));
-          newX = startPosX + (startWidth - newWidth);
-          break;
-        case 'bottom-right':
-          newWidth = Math.min(300, Math.max(80, startWidth + dx));
-          newHeight = Math.min(300, Math.max(80, startHeight + dy));
-          break;
-      }
+      let newHeight = direction.includes('bottom')
+        ? Math.min(300, Math.max(80, startHeight + dy))
+        : Math.min(300, Math.max(80, startHeight - dy));
 
-      // Update local state immediately for visual feedback
       setSize({ width: newWidth, height: newHeight });
-      setPosition({ x: newX, y: newY });
     };
 
     const handleEnd = () => {
       setResizing(false);
-      setResizeHandle(null);
-      // Only notify parent of changes after resize is complete
       onResize(table.id, size);
-      onDragStop(table.id, position);
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleEnd);
     };
@@ -157,7 +127,7 @@ const DraggableTable = ({
       position={position}
       onDrag={(e, data) => setPosition({ x: data.x, y: data.y })}
       onStop={(e, data) => onDragStop(table.id, data)}
-      disabled={!editMode || resizing}
+      disabled={resizing || !editMode}
       bounds="parent"
     >
       <div
@@ -170,13 +140,10 @@ const DraggableTable = ({
           width: size.width,
           height: size.height,
           touchAction: 'none',
-          userSelect: 'none',
         }}
         onClick={(e) => {
-          if (!resizing) {
-            e.stopPropagation();
-            onClick();
-          }
+          e.stopPropagation();
+          onClick();
         }}
       >
         {/* Table content */}
@@ -187,37 +154,26 @@ const DraggableTable = ({
         {/* Resize handles */}
         {editMode && (
           <>
-            {/* Top-left resize handle */}
             <div
-              className={`absolute -top-1 -left-1 w-3 h-3 cursor-nw-resize rounded-full bg-primary ${
-                resizeHandle === 'top-left' ? 'opacity-100' : 'opacity-50'
-              } hover:opacity-100`}
-              onMouseDown={(e) => handleResizeStart(e, 'top-left')}
+              className="absolute -top-1 -right-1 w-3 h-3 cursor-ne-resize rounded-full bg-primary hover:opacity-100 opacity-50"
+              onMouseDown={(e) => handleResizeStart(e, 'right-top')}
             />
-            {/* Top-right resize handle */}
             <div
-              className={`absolute -top-1 -right-1 w-3 h-3 cursor-ne-resize rounded-full bg-primary ${
-                resizeHandle === 'top-right' ? 'opacity-100' : 'opacity-50'
-              } hover:opacity-100`}
-              onMouseDown={(e) => handleResizeStart(e, 'top-right')}
+              className="absolute -bottom-1 -right-1 w-3 h-3 cursor-se-resize rounded-full bg-primary hover:opacity-100 opacity-50"
+              onMouseDown={(e) => handleResizeStart(e, 'right-bottom')}
             />
-            {/* Bottom-left resize handle */}
             <div
-              className={`absolute -bottom-1 -left-1 w-3 h-3 cursor-sw-resize rounded-full bg-primary ${
-                resizeHandle === 'bottom-left' ? 'opacity-100' : 'opacity-50'
-              } hover:opacity-100`}
-              onMouseDown={(e) => handleResizeStart(e, 'bottom-left')}
+              className="absolute -bottom-1 -left-1 w-3 h-3 cursor-sw-resize rounded-full bg-primary hover:opacity-100 opacity-50"
+              onMouseDown={(e) => handleResizeStart(e, 'left-bottom')}
             />
-            {/* Bottom-right resize handle */}
             <div
-              className={`absolute -bottom-1 -right-1 w-3 h-3 cursor-se-resize rounded-full bg-primary ${
-                resizeHandle === 'bottom-right' ? 'opacity-100' : 'opacity-50'
-              } hover:opacity-100`}
-              onMouseDown={(e) => handleResizeStart(e, 'bottom-right')}
+              className="absolute -top-1 -left-1 w-3 h-3 cursor-nw-resize rounded-full bg-primary hover:opacity-100 opacity-50"
+              onMouseDown={(e) => handleResizeStart(e, 'left-top')}
             />
           </>
         )}
-        {/* Delete button */}
+
+        {/* Rest of the components remain unchanged */}
         {editMode && (
           <div className="absolute -top-8 left-1/2 -translate-x-1/2">
             <AlertDialog>
