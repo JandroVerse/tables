@@ -84,8 +84,6 @@ const DraggableTable = ({
     y: table.position.y || 0,
   });
   const [resizing, setResizing] = useState(false);
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
-  const [startSize, setStartSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     setSize({
@@ -103,48 +101,36 @@ const DraggableTable = ({
     e.stopPropagation();
     e.preventDefault();
 
-    setResizing(true);
-    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-
-    setStartPos({ x: clientX, y: clientY });
-    setStartSize({ width: size.width, height: size.height });
+    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const startWidth = size.width;
+    const startHeight = size.height;
 
     const handleMove = (e: MouseEvent | TouchEvent) => {
       if (!resizing) return;
 
-      const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+      const currentX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+      const currentY = 'touches' in e ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY;
 
-      const deltaX = clientX - startPos.x;
-      const deltaY = clientY - startPos.y;
+      const deltaX = currentX - startX;
+      const deltaY = currentY - startY;
 
-      const newWidth = Math.max(80, Math.min(300, startSize.width + deltaX));
-      const newHeight = Math.max(80, Math.min(300, startSize.height + deltaY));
+      const newWidth = Math.max(80, Math.min(300, startWidth + deltaX));
+      const newHeight = Math.max(80, Math.min(300, startHeight + deltaY));
 
       setSize({ width: newWidth, height: newHeight });
+      onResize(table.id, { width: newWidth, height: newHeight });
     };
 
     const handleEnd = () => {
-      if (!resizing) return;
       setResizing(false);
-
-      // Ensure we're using the final size values
-      const finalSize = {
-        width: Math.max(80, Math.min(300, size.width)),
-        height: Math.max(80, Math.min(300, size.height))
-      };
-
-      // Update the local state and trigger the parent update
-      setSize(finalSize);
-      onResize(table.id, finalSize);
-
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleEnd);
       window.removeEventListener('touchmove', handleMove);
       window.removeEventListener('touchend', handleEnd);
     };
 
+    setResizing(true);
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleEnd);
     window.addEventListener('touchmove', handleMove);
