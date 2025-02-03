@@ -32,6 +32,7 @@ import { FeedbackDialog } from "@/components/feedback-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedBackground } from "@/components/animated-background";
 import { useParams } from "wouter";
+import { formatDistance } from "date-fns";
 
 const cardVariants = {
   initial: { opacity: 0, y: 20 },
@@ -69,6 +70,8 @@ export default function TablePage() {
   const [isValidating, setIsValidating] = useState(true);
   const [isValid, setIsValid] = useState(false);
   const [tableData, setTableData] = useState<any>(null);
+  const [sessionExpiryTime, setSessionExpiryTime] = useState<Date | null>(null);
+  const [remainingTime, setRemainingTime] = useState<string>("");
 
   // Initialize session and validate table
   useEffect(() => {
@@ -158,6 +161,36 @@ export default function TablePage() {
 
     initializeSession();
   }, [restaurantId, tableId, queryClient, toast]);
+
+  useEffect(() => {
+    const updateRemainingTime = () => {
+      if (sessionExpiryTime) {
+        const now = new Date();
+        if (sessionExpiryTime > now) {
+          setRemainingTime(formatDistance(sessionExpiryTime, now, { addSuffix: true }));
+        } else {
+          setRemainingTime("Session expired");
+          // Optionally redirect or show expired message
+        }
+      }
+    };
+
+    const storedSession = localStorage.getItem(`table_session_${tableId}`);
+    if (storedSession) {
+      try {
+        const session = JSON.parse(storedSession);
+        setSessionExpiryTime(new Date(session.expiry));
+      } catch (e) {
+        console.error("Failed to parse session expiry time:", e);
+      }
+    }
+
+    updateRemainingTime();
+    const interval = setInterval(updateRemainingTime, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [sessionExpiryTime, tableId]);
+
 
   useEffect(() => {
     wsService.connect();
@@ -370,7 +403,7 @@ export default function TablePage() {
     );
   }
 
-    if (!sessionId) return <div>Initializing table session...</div>;
+  if (!sessionId) return <div>Initializing table session...</div>;
 
   const hasActiveRequest = (type: string) => {
     return requests.some(
@@ -421,6 +454,13 @@ export default function TablePage() {
             <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
               {tableData ? tableData.name : 'Loading...'}
             </CardTitle>
+             <div className="text-center text-sm text-muted-foreground">
+                {remainingTime && (
+                  <div className="mt-1">
+                    Session expires {remainingTime}
+                  </div>
+                )}
+              </div>
             <div className="text-center text-sm text-muted-foreground">
               How can we help you?
             </div>
