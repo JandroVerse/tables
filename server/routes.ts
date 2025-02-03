@@ -8,6 +8,24 @@ import QRCode from "qrcode";
 import { nanoid } from "nanoid";
 import { setupAuth } from "./auth";
 
+async function verifyTableAccess(restaurantId: number, tableId: number) {
+  const [table] = await db.query.tables.findMany({
+    where: and(
+      eq(tables.id, tableId),
+      eq(tables.restaurantId, restaurantId)
+    ),
+    with: {
+      restaurant: true
+    }
+  });
+
+  if (!table) {
+    throw new Error(`Table ${tableId} not found in restaurant ${restaurantId}`);
+  }
+
+  return table;
+}
+
 function ensureAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
   if (req.isAuthenticated()) {
     return next();
@@ -182,37 +200,15 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/restaurants/:restaurantId/tables/:tableId", async (req, res) => {
     const { restaurantId, tableId } = req.params;
 
-    console.log('Verifying table access:', {
-      restaurantId,
-      tableId
-    });
-
     try {
-      const [table] = await db.query.tables.findMany({
-        where: and(
-          eq(tables.id, Number(tableId)),
-          eq(tables.restaurantId, Number(restaurantId))
-        ),
-        with: {
-          restaurant: true
-        }
-      });
-
-      if (!table) {
-        console.log('Table not found or invalid restaurant:', {
-          tableId,
-          restaurantId
-        });
-        return res.status(404).json({ message: "Table not found or invalid restaurant" });
-      }
-
-      console.log('Found table with restaurant:', table);
-
-      // Return the table data with restaurant context
+      console.log(`Verifying access for table ${tableId} in restaurant ${restaurantId}`);
+      const table = await verifyTableAccess(Number(restaurantId), Number(tableId));
       res.json(table);
     } catch (error) {
       console.error('Error verifying table:', error);
-      res.status(500).json({ message: "Failed to verify table", error: String(error) });
+      res.status(404).json({ 
+        message: error instanceof Error ? error.message : "Table not found or invalid restaurant"
+      });
     }
   });
 
@@ -314,17 +310,10 @@ export function registerRoutes(app: Express): Server {
     const sessionId = nanoid();
 
     try {
-      // Verify the table belongs to the restaurant first
-      const [table] = await db.query.tables.findMany({
-        where: and(
-          eq(tables.id, Number(tableId)),
-          eq(tables.restaurantId, Number(restaurantId))
-        ),
-      });
+      console.log(`Creating session for table ${tableId} in restaurant ${restaurantId}`);
 
-      if (!table) {
-        return res.status(404).json({ message: "Table not found in this restaurant" });
-      }
+      // Verify the table belongs to the restaurant
+      const table = await verifyTableAccess(Number(restaurantId), Number(tableId));
 
       // Close any existing active sessions for this table
       await db.update(tableSessions)
@@ -343,13 +332,19 @@ export function registerRoutes(app: Express): Server {
         })
         .returning();
 
+      console.log(`Created session ${session.id} for table ${tableId}`);
+
       res.json({
         ...session,
-        restaurantId: Number(restaurantId)
+        restaurant: table.restaurant,
+        tableName: table.name
       });
     } catch (error) {
       console.error('Error creating session:', error);
-      res.status(500).json({ message: "Failed to create session" });
+      res.status(500).json({ 
+        message: "Failed to create session",
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
