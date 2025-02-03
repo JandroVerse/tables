@@ -85,82 +85,66 @@ const DraggableTable = ({
   });
   const [resizing, setResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-  const [initialMousePos, setInitialMousePos] = useState({ x: 0, y: 0 });
-  const [initialSize, setInitialSize] = useState({ width: 0, height: 0 });
-  const [initialPosition, setInitialPosition] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    if (!resizing) {
-      setSize({
-        width: table.position.width || 100,
-        height: table.position.height || 100,
-      });
-      setPosition({
-        x: table.position.x || 0,
-        y: table.position.y || 0,
-      });
-    }
-  }, [table.position, resizing]);
 
   const handleResizeStart = (e: React.MouseEvent, handle: string) => {
     if (!editMode) return;
     e.stopPropagation();
-    e.preventDefault();
-
     setResizing(true);
     setResizeHandle(handle);
-    setInitialMousePos({ x: e.clientX, y: e.clientY });
-    setInitialSize({ ...size });
-    setInitialPosition({ ...position });
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = size.width;
+    const startHeight = size.height;
+    const startPosX = position.x;
+    const startPosY = position.y;
 
     const handleMove = (e: MouseEvent) => {
       if (!resizing) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
 
-      const deltaX = e.clientX - initialMousePos.x;
-      const deltaY = e.clientY - initialMousePos.y;
-
-      let newSize = { ...initialSize };
-      let newPosition = { ...initialPosition };
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+      let newX = startPosX;
+      let newY = startPosY;
 
       switch (handle) {
         case 'top-left':
-          newSize.width = Math.max(80, initialSize.width - deltaX);
-          newSize.height = Math.max(80, initialSize.height - deltaY);
-          newPosition.x = initialPosition.x + (initialSize.width - newSize.width);
-          newPosition.y = initialPosition.y + (initialSize.height - newSize.height);
+          newWidth = Math.max(80, startWidth - dx);
+          newHeight = Math.max(80, startHeight - dy);
+          newX = startPosX + (startWidth - newWidth);
+          newY = startPosY + (startHeight - newHeight);
           break;
         case 'top-right':
-          newSize.width = Math.max(80, initialSize.width + deltaX);
-          newSize.height = Math.max(80, initialSize.height - deltaY);
-          newPosition.y = initialPosition.y + (initialSize.height - newSize.height);
+          newWidth = Math.max(80, startWidth + dx);
+          newHeight = Math.max(80, startHeight - dy);
+          newY = startPosY + (startHeight - newHeight);
           break;
         case 'bottom-left':
-          newSize.width = Math.max(80, initialSize.width - deltaX);
-          newSize.height = Math.max(80, initialSize.height + deltaY);
-          newPosition.x = initialPosition.x + (initialSize.width - newSize.width);
+          newWidth = Math.max(80, startWidth - dx);
+          newHeight = Math.max(80, startHeight + dy);
+          newX = startPosX + (startWidth - newWidth);
           break;
         case 'bottom-right':
-          newSize.width = Math.max(80, initialSize.width + deltaX);
-          newSize.height = Math.max(80, initialSize.height + deltaY);
+          newWidth = Math.max(80, startWidth + dx);
+          newHeight = Math.max(80, startHeight + dy);
           break;
       }
 
       // Apply max constraints
-      newSize.width = Math.min(300, newSize.width);
-      newSize.height = Math.min(300, newSize.height);
+      newWidth = Math.min(300, newWidth);
+      newHeight = Math.min(300, newHeight);
 
-      setSize(newSize);
-      setPosition(newPosition);
+      setSize({ width: newWidth, height: newHeight });
+      setPosition({ x: newX, y: newY });
+      onResize(table.id, { width: newWidth, height: newHeight });
+      onDragStop(table.id, { x: newX, y: newY });
     };
 
     const handleEnd = () => {
       setResizing(false);
       setResizeHandle(null);
-
-      // Update both size and position in parent
-      onResize(table.id, size);
-      onDragStop(table.id, position);
-
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleEnd);
     };
@@ -248,8 +232,8 @@ const DraggableTable = ({
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete {table.name}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete the
-                    table and all its associated data.
+                    This will permanently delete the table and all its associated data.
+                    This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
