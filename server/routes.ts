@@ -30,15 +30,21 @@ export function registerRoutes(app: Express): Server {
   // Setup authentication
   setupAuth(app);
 
-  // WebSocket setup
+  // Update the WebSocket setup section
   wss.on("connection", (ws: WebSocket) => {
     console.log("New WebSocket connection");
     ws.on("message", (message: string) => {
-      wss.clients.forEach((client) => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(message);
-        }
-      });
+      try {
+        const data = JSON.parse(message.toString());
+        // Only broadcast to clients in the same restaurant context
+        wss.clients.forEach((client) => {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(message);
+          }
+        });
+      } catch (error) {
+        console.error("Failed to parse WebSocket message:", error);
+      }
     });
   });
 
@@ -84,6 +90,7 @@ export function registerRoutes(app: Express): Server {
     const allTables = await db.query.tables.findMany({
       where: eq(tables.restaurantId, Number(restaurantId)),
     });
+
     res.json(allTables);
   });
 
@@ -112,8 +119,9 @@ export function registerRoutes(app: Express): Server {
       })
       .returning();
 
+    // Generate QR code with restaurant context
     const qrCodeSvg = await QRCode.toString(
-      `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table?id=${table.id}`,
+      `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table/${restaurantId}/${table.id}`,
       { 
         type: 'svg',
         width: 256,
@@ -133,8 +141,8 @@ export function registerRoutes(app: Express): Server {
 
     res.json(updatedTable);
   });
-
-    // Session management
+  
+  // Session management
   app.post("/api/tables/:tableId/sessions", async (req, res) => {
     const tableId = Number(req.params.tableId);
     const sessionId = nanoid();
@@ -159,7 +167,7 @@ export function registerRoutes(app: Express): Server {
     res.json(session);
   });
 
-    app.delete("/api/tables/:id", async (req, res) => {
+  app.delete("/api/tables/:id", async (req, res) => {
     const { id } = req.params;
     await db.delete(requests).where(eq(requests.tableId, Number(id)));
     const [deletedTable] = await db.delete(tables)
