@@ -65,13 +65,14 @@ export function AnimatedBackground() {
             }}
             animate={{
               y: [0, -40, 0],
-              opacity: [0, 1, 0],
-              scale: [1, 1.5, 1],
+              opacity: [0, 0.4, 0],
+              scale: [0.8, 1.2, 0.8],
             }}
             transition={{
-              duration: Math.random() * 6 + 6,
+              duration: 8,
               repeat: Infinity,
-              delay: Math.random() * 4,
+              ease: "easeInOut",
+              delay: i * 0.2,
             }}
           />
         ))}
