@@ -74,8 +74,8 @@ export default function TablePage() {
         .then((data) => {
           if (data.valid) {
             setIsValid(true);
-            // Only create session if table is valid
-            return apiRequest("POST", `/api/tables/${tableId}/sessions`);
+            // Fixed the session creation endpoint URL
+            return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
           }
           throw new Error("Invalid table");
         })
