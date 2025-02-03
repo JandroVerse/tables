@@ -25,6 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
 import { AnimatedBackground } from "@/components/animated-background";
+import { Navbar } from "@/components/ui/navbar";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -155,6 +156,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen">
+      <Navbar />
       <div className="relative z-0">
         <AnimatedBackground />
       </div>
@@ -166,7 +168,7 @@ export default function AdminPage() {
       >
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">
-            {currentRestaurant 
+            {currentRestaurant
               ? `${currentRestaurant.name} Dashboard`
               : "Restaurant Admin Dashboard"}
           </h1>
