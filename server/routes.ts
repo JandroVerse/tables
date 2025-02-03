@@ -2,10 +2,18 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
-import { tables, requests, feedback, tableSessions } from "@db/schema";
+import { tables, requests, feedback, tableSessions, restaurants } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
+import { setupAuth } from "./auth";
+
+function ensureAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ message: "Not authenticated" });
+}
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
@@ -19,6 +27,10 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Setup authentication
+  setupAuth(app);
+
+  // WebSocket setup
   wss.on("connection", (ws: WebSocket) => {
     console.log("New WebSocket connection");
     ws.on("message", (message: string) => {
@@ -30,7 +42,99 @@ export function registerRoutes(app: Express): Server {
     });
   });
 
-  // Session management
+  // Restaurant routes
+  app.post("/api/restaurants", ensureAuthenticated, async (req, res) => {
+    const { name, address, phone } = req.body;
+    const [restaurant] = await db.insert(restaurants)
+      .values({
+        name,
+        ownerId: req.user!.id,
+        address,
+        phone,
+      })
+      .returning();
+    res.json(restaurant);
+  });
+
+  app.get("/api/restaurants", ensureAuthenticated, async (req, res) => {
+    const userRestaurants = await db.query.restaurants.findMany({
+      where: eq(restaurants.ownerId, req.user!.id),
+    });
+    res.json(userRestaurants);
+  });
+
+  app.get("/api/restaurants/:id", ensureAuthenticated, async (req, res) => {
+    const [restaurant] = await db.query.restaurants.findMany({
+      where: and(
+        eq(restaurants.id, Number(req.params.id)),
+        eq(restaurants.ownerId, req.user!.id)
+      ),
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    res.json(restaurant);
+  });
+
+  // Table routes - updated for restaurant context
+  app.get("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req, res) => {
+    const { restaurantId } = req.params;
+    const allTables = await db.query.tables.findMany({
+      where: eq(tables.restaurantId, Number(restaurantId)),
+    });
+    res.json(allTables);
+  });
+
+  app.post("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req, res) => {
+    const { restaurantId } = req.params;
+    const { name, position } = req.body;
+
+    // Verify restaurant ownership
+    const [restaurant] = await db.query.restaurants.findMany({
+      where: and(
+        eq(restaurants.id, Number(restaurantId)),
+        eq(restaurants.ownerId, req.user!.id)
+      ),
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    const [table] = await db.insert(tables)
+      .values({
+        name,
+        restaurantId: Number(restaurantId),
+        qrCode: '',
+        position,
+      })
+      .returning();
+
+    const qrCodeSvg = await QRCode.toString(
+      `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table?id=${table.id}`,
+      { 
+        type: 'svg',
+        width: 256,
+        margin: 4,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      }
+    );
+
+    const [updatedTable] = await db
+      .update(tables)
+      .set({ qrCode: qrCodeSvg })
+      .where(eq(tables.id, table.id))
+      .returning();
+
+    res.json(updatedTable);
+  });
+
+    // Session management
   app.post("/api/tables/:tableId/sessions", async (req, res) => {
     const tableId = Number(req.params.tableId);
     const sessionId = nanoid();
@@ -55,13 +159,7 @@ export function registerRoutes(app: Express): Server {
     res.json(session);
   });
 
-  // Table routes
-  app.get("/api/tables", async (req, res) => {
-    const allTables = await db.query.tables.findMany();
-    res.json(allTables);
-  });
-
-  app.delete("/api/tables/:id", async (req, res) => {
+    app.delete("/api/tables/:id", async (req, res) => {
     const { id } = req.params;
     await db.delete(requests).where(eq(requests.tableId, Number(id)));
     const [deletedTable] = await db.delete(tables)
@@ -79,36 +177,6 @@ export function registerRoutes(app: Express): Server {
     });
 
     res.json(deletedTable);
-  });
-
-  app.post("/api/tables", async (req, res) => {
-    const { name, position } = req.body;
-    const [table] = await db.insert(tables).values({
-      name,
-      qrCode: '',
-      position,
-    }).returning();
-
-    const qrCodeSvg = await QRCode.toString(
-      `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table?id=${table.id}`,
-      { 
-        type: 'svg',
-        width: 256,
-        margin: 4,
-        color: {
-          dark: '#000000',
-          light: '#ffffff'
-        }
-      }
-    );
-
-    const [updatedTable] = await db
-      .update(tables)
-      .set({ qrCode: qrCodeSvg })
-      .where(eq(tables.id, table.id))
-      .returning();
-
-    res.json(updatedTable);
   });
 
   app.patch("/api/tables/:id", async (req, res) => {
@@ -148,7 +216,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Request routes
+    // Request routes
   app.get("/api/requests", async (req, res) => {
     const { tableId, sessionId } = req.query;
     let query = {};
@@ -209,7 +277,7 @@ export function registerRoutes(app: Express): Server {
     res.json(request);
   });
 
-  // Feedback routes
+    // Feedback routes
   app.post("/api/feedback", async (req, res) => {
     const { requestId, rating, comment } = req.body;
 
