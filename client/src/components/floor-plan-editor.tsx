@@ -113,7 +113,17 @@ const DraggableTable = ({
 
     const handleEnd = () => {
       setResizing(false);
-      onResize(table.id, size);
+      // Update the server with the new size by updating the table's position object
+      updateTablePosition({
+        id: table.id,
+        position: {
+          ...table.position,
+          width: size.width,
+          height: size.height,
+          x: position.x,
+          y: position.y,
+        },
+      });
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleEnd);
     };
