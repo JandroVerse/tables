@@ -330,7 +330,7 @@ export default function TablePage() {
         <Card className="max-w-md mx-auto shadow-lg border-0">
           <CardHeader className="pb-4">
             <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
-              {tableData ? `Table ${tableData.name}` : 'Loading...'}
+              {tableData ? tableData.name : 'Loading...'}
             </CardTitle>
             <div className="text-center text-sm text-muted-foreground">
               How can we help you?
