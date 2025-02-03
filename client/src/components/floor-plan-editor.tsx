@@ -83,6 +83,9 @@ const DraggableTable = ({
     x: table.position.x || 0, 
     y: table.position.y || 0 
   });
+  const [resizing, setResizing] = useState(false);
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  const [startSize, setStartSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     setSize({ 
@@ -95,12 +98,42 @@ const DraggableTable = ({
     });
   }, [table.position]);
 
+  const handleResizeStart = (e: React.MouseEvent) => {
+    if (!editMode) return;
+    e.stopPropagation();
+    setResizing(true);
+    setStartPos({ x: e.clientX, y: e.clientY });
+    setStartSize({ width: size.width, height: size.height });
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!resizing) return;
+
+      const deltaX = e.clientX - startPos.x;
+      const deltaY = e.clientY - startPos.y;
+
+      const newWidth = Math.max(80, Math.min(300, startSize.width + deltaX));
+      const newHeight = Math.max(80, Math.min(300, startSize.height + deltaY));
+
+      setSize({ width: newWidth, height: newHeight });
+    };
+
+    const onMouseUp = () => {
+      setResizing(false);
+      onResize(table.id, size);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
   return (
     <Draggable
       position={position}
       onDrag={(e, data) => setPosition({ x: data.x, y: data.y })}
       onStop={(e, data) => onDragStop(table.id, data)}
-      disabled={!editMode}
+      disabled={!editMode || resizing}
       bounds="parent"
     >
       <div
@@ -112,15 +145,27 @@ const DraggableTable = ({
         style={{
           width: size.width,
           height: size.height,
+          touchAction: 'none',
         }}
         onClick={(e) => {
           e.stopPropagation();
           onClick();
         }}
       >
+        {/* Table content */}
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-medium text-gray-800">{table.name}</span>
         </div>
+
+        {/* Resize handle */}
+        {editMode && (
+          <div
+            className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize bg-primary/20 rounded-bl"
+            onMouseDown={handleResizeStart}
+          />
+        )}
+
+        {/* Delete button and request indicators remain the same */}
         {editMode && (
           <div className="absolute -top-8 left-1/2 -translate-x-1/2">
             <AlertDialog>
@@ -150,6 +195,7 @@ const DraggableTable = ({
             </AlertDialog>
           </div>
         )}
+
         <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
           <div className="flex gap-2">
             <AnimatePresence>
