@@ -14,9 +14,10 @@ class WebSocketService {
   private ws: WebSocket | null = null;
   private listeners: ServiceRequestListener[] = [];
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
+  private maxReconnectAttempts = 10; // Increased from 5 to 10
+  private reconnectDelay = 2000; // Increased from 1000 to 2000
   private isConnected = false;
+  private connectionTimer: NodeJS.Timeout | null = null;
 
   connect() {
     if (this.ws?.readyState === WebSocket.OPEN) {
@@ -24,67 +25,95 @@ class WebSocketService {
       return;
     }
 
+    // Clear any existing connection timer
+    if (this.connectionTimer) {
+      clearTimeout(this.connectionTimer);
+      this.connectionTimer = null;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const sessionId = localStorage.getItem('sessionId');
 
     if (!sessionId) {
-      console.log('WebSocket: No session ID available, delaying connection');
+      console.log('WebSocket: No session ID available, retrying in 2 seconds');
+      this.connectionTimer = setTimeout(() => this.connect(), 2000);
       return;
     }
 
-    // Include session ID in query params for initial authentication
     const wsUrl = new URL(`${protocol}//${host}/ws`);
     wsUrl.searchParams.append('sessionId', sessionId);
 
     console.log('WebSocket: Attempting to connect to', wsUrl.toString());
 
-    this.ws = new WebSocket(wsUrl.toString());
+    try {
+      this.ws = new WebSocket(wsUrl.toString());
 
-    this.ws.onopen = () => {
-      console.log('WebSocket: Connection established');
-      this.isConnected = true;
-      this.reconnectAttempts = 0;
-      this.notifyListeners({
-        type: 'connection_status',
-        status: 'connected'
-      });
-    };
-
-    this.ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('WebSocket: Received message', data);
-        this.listeners.forEach(listener => listener(data));
-      } catch (error) {
-        console.error('WebSocket: Error parsing message', error);
-      }
-    };
-
-    this.ws.onclose = () => {
-      console.log('WebSocket: Connection closed');
-      this.isConnected = false;
-      this.notifyListeners({
-        type: 'connection_status',
-        status: 'disconnected'
-      });
-
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
-        console.log(`WebSocket: Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+      this.ws.onopen = () => {
+        console.log('WebSocket: Connection established');
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
         this.notifyListeners({
           type: 'connection_status',
-          status: 'reconnecting'
+          status: 'connected'
         });
-        this.reconnectAttempts++;
-        setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);
-      } else {
-        console.error('WebSocket: Max reconnection attempts reached');
-      }
-    };
+      };
 
-    this.ws.onerror = (error) => {
-      console.error('WebSocket: Error occurred', error);
-    };
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('WebSocket: Received message', data);
+          this.listeners.forEach(listener => listener(data));
+        } catch (error) {
+          console.error('WebSocket: Error parsing message', error);
+        }
+      };
+
+      this.ws.onclose = () => {
+        console.log('WebSocket: Connection closed');
+        this.isConnected = false;
+        this.ws = null;
+
+        this.notifyListeners({
+          type: 'connection_status',
+          status: 'disconnected'
+        });
+
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          const delay = this.reconnectDelay * Math.min(Math.pow(2, this.reconnectAttempts), 10);
+          console.log(`WebSocket: Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}) in ${delay}ms`);
+
+          this.notifyListeners({
+            type: 'connection_status',
+            status: 'reconnecting'
+          });
+
+          this.reconnectAttempts++;
+          this.connectionTimer = setTimeout(() => this.connect(), delay);
+        } else {
+          console.error('WebSocket: Max reconnection attempts reached');
+        }
+      };
+
+      this.ws.onerror = (error) => {
+        console.error('WebSocket: Error occurred', error);
+        if (this.ws) {
+          this.ws.close();
+        }
+      };
+    } catch (error) {
+      console.error('WebSocket: Failed to create connection', error);
+      this.handleReconnect();
+    }
+  }
+
+  private handleReconnect() {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      const delay = this.reconnectDelay * Math.min(Math.pow(2, this.reconnectAttempts), 10);
+      console.log(`WebSocket: Scheduling reconnection attempt (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}) in ${delay}ms`);
+      this.reconnectAttempts++;
+      this.connectionTimer = setTimeout(() => this.connect(), delay);
+    }
   }
 
   send(message: WebSocketMessage) {
@@ -119,8 +148,10 @@ class WebSocketService {
   }
 
   subscribe(listener: ServiceRequestListener) {
-    console.log('WebSocket: New listener subscribed');
-    this.listeners.push(listener);
+    if (!this.listeners.includes(listener)) {
+      console.log('WebSocket: New listener subscribed');
+      this.listeners.push(listener);
+    }
     return () => {
       console.log('WebSocket: Listener unsubscribed');
       this.listeners = this.listeners.filter(l => l !== listener);
@@ -129,6 +160,19 @@ class WebSocketService {
 
   private notifyListeners(message: WebSocketMessage) {
     this.listeners.forEach(listener => listener(message));
+  }
+
+  disconnect() {
+    if (this.connectionTimer) {
+      clearTimeout(this.connectionTimer);
+      this.connectionTimer = null;
+    }
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.isConnected = false;
+    this.reconnectAttempts = 0;
   }
 }
 
