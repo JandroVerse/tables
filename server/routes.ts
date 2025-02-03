@@ -133,8 +133,8 @@ export function registerRoutes(app: Express): Server {
 
       console.log('Created table:', table.id);
 
-      // Generate QR code with full URL - updated to point to the request page
-      const tableUrl = `https://${domain}/request/${restaurantId}/${table.id}`;
+      // Generate QR code with full URL - updated to point to the table page
+      const tableUrl = `https://${domain}/table/${restaurantId}/${table.id}`;
       console.log('Generating QR code for URL:', tableUrl);
 
       const qrCodeSvg = await QRCode.toString(tableUrl, { 
@@ -147,7 +147,7 @@ export function registerRoutes(app: Express): Server {
         }
       });
 
-      console.log('Generated QR code SVG:', qrCodeSvg.substring(0, 100) + '...');
+      console.log('Generated QR code SVG length:', qrCodeSvg.length);
 
       // Update the table with the generated QR code
       const [updatedTable] = await db
@@ -161,7 +161,6 @@ export function registerRoutes(app: Express): Server {
       }
 
       console.log('Successfully updated table with QR code:', updatedTable.id);
-      console.log('QR code length:', updatedTable.qrCode.length);
 
       res.json(updatedTable);
     } catch (error) {
@@ -170,7 +169,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-// Add specific endpoint to verify table exists
+    // Add specific endpoint to verify table exists
   app.get("/api/restaurants/:restaurantId/tables/:tableId/verify", async (req, res) => {
     const { restaurantId, tableId } = req.params;
 
@@ -192,6 +191,7 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Failed to verify table" });
     }
   });
+
 
   app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
     const { restaurantId, tableId } = req.params;
