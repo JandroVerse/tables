@@ -55,8 +55,13 @@ export default function TablePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const params = useParams();
+
+  console.log('Table Page Params:', params);
+
   const restaurantId = Number(params.restaurantId);
   const tableId = Number(params.tableId);
+
+  console.log('Parsed IDs:', { restaurantId, tableId });
   const [otherRequestNote, setOtherRequestNote] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);

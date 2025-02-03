@@ -27,6 +27,12 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add request logging middleware
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
+  });
+
   // Setup authentication
   setupAuth(app);
 
@@ -162,30 +168,30 @@ export function registerRoutes(app: Express): Server {
       console.error('Error in table creation/QR generation:', error);
       res.status(500).json({ message: "Failed to create table or generate QR code", error: String(error) });
     }
-});
+  });
 
 // Add specific endpoint to verify table exists
-app.get("/api/restaurants/:restaurantId/tables/:tableId/verify", async (req, res) => {
-  const { restaurantId, tableId } = req.params;
+  app.get("/api/restaurants/:restaurantId/tables/:tableId/verify", async (req, res) => {
+    const { restaurantId, tableId } = req.params;
 
-  try {
-    const [table] = await db.query.tables.findMany({
-      where: and(
-        eq(tables.id, Number(tableId)),
-        eq(tables.restaurantId, Number(restaurantId))
-      ),
-    });
+    try {
+      const [table] = await db.query.tables.findMany({
+        where: and(
+          eq(tables.id, Number(tableId)),
+          eq(tables.restaurantId, Number(restaurantId))
+        ),
+      });
 
-    if (!table) {
-      return res.status(404).json({ message: "Table not found" });
+      if (!table) {
+        return res.status(404).json({ message: "Table not found" });
+      }
+
+      res.json({ valid: true, table });
+    } catch (error) {
+      console.error('Error verifying table:', error);
+      res.status(500).json({ message: "Failed to verify table" });
     }
-
-    res.json({ valid: true, table });
-  } catch (error) {
-    console.error('Error verifying table:', error);
-    res.status(500).json({ message: "Failed to verify table" });
-  }
-});
+  });
 
   app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
     const { restaurantId, tableId } = req.params;
