@@ -24,10 +24,12 @@ class WebSocketService {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
+    const sessionId = localStorage.getItem('sessionId');
 
     console.log('WebSocket: Attempting to connect to', `${protocol}//${host}/ws`);
 
-    this.ws = new WebSocket(`${protocol}//${host}/ws`);
+    // Include session ID in the WebSocket URL
+    this.ws = new WebSocket(`${protocol}//${host}/ws${sessionId ? `?sessionId=${sessionId}` : ''}`);
 
     this.ws.onopen = () => {
       console.log('WebSocket: Connection established');
@@ -76,9 +78,20 @@ class WebSocketService {
   }
 
   send(message: WebSocketMessage) {
+    if (!message.tableId || !message.restaurantId) {
+      console.error('WebSocket: Invalid message - missing required parameters', message);
+      return;
+    }
+
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('WebSocket: Sending message', message);
-      this.ws.send(JSON.stringify(message));
+      // Include session ID in the message payload
+      const sessionId = localStorage.getItem('sessionId');
+      const messageWithSession = {
+        ...message,
+        sessionId
+      };
+      this.ws.send(JSON.stringify(messageWithSession));
     } else {
       console.error('WebSocket: Cannot send message - connection not open', {
         readyState: this.ws?.readyState,
