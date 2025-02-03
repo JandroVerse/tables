@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
-import { LogOut } from "lucide-react";
+import { LogOut, Loader2 } from "lucide-react";
 
 export function Navbar() {
   const { logoutMutation } = useAuth();
@@ -15,8 +15,12 @@ export function Navbar() {
           onClick={() => logoutMutation.mutate()}
           disabled={logoutMutation.isPending}
         >
-          <LogOut className="h-4 w-4 mr-2" />
-          Logout
+          {logoutMutation.isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <LogOut className="h-4 w-4 mr-2" />
+          )}
+          {logoutMutation.isPending ? "Logging out..." : "Logout"}
         </Button>
       </div>
     </nav>
