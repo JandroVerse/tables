@@ -454,13 +454,13 @@ export default function TablePage() {
             <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
               {tableData ? tableData.name : 'Loading...'}
             </CardTitle>
-             <div className="text-center text-sm text-muted-foreground">
-                {remainingTime && (
-                  <div className="mt-1">
-                    Session expires {remainingTime}
-                  </div>
-                )}
-              </div>
+            <div className="text-center text-sm text-muted-foreground">
+              {remainingTime && (
+                <div className="mt-1">
+                  Session expires {remainingTime}
+                </div>
+              )}
+            </div>
             <div className="text-center text-sm text-muted-foreground">
               How can we help you?
             </div>
