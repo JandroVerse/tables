@@ -226,14 +226,20 @@ export default function TablePage() {
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", tableId, restaurantId],
     queryFn: async () => {
-      if (!sessionId) return [];
+      if (!sessionId || !tableId || !restaurantId) return [];
+      console.log('Fetching requests with:', { tableId, restaurantId, sessionId });
       const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`, {
         headers: {
           'X-Session-ID': sessionId
         }
       });
-      if (!res.ok) throw new Error("Failed to fetch requests");
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Failed to fetch requests:', errorText);
+        throw new Error(errorText || "Failed to fetch requests");
+      }
       const data = await res.json();
+      console.log('Fetched requests:', data);
       return data.map((request: any) => ({
         ...request,
         tableName: tableData?.name
