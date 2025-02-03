@@ -354,23 +354,32 @@ export function registerRoutes(app: Express): Server {
     console.log(`Fetching requests for table ${tableId} in restaurant ${restaurantId}, session ${sessionId}`);
 
     try {
+      // Validate parameters
+      const parsedTableId = tableId ? parseInt(tableId as string) : null;
+      const parsedRestaurantId = restaurantId ? parseInt(restaurantId as string) : null;
+
+      if (!parsedTableId || isNaN(parsedTableId) || !parsedRestaurantId || isNaN(parsedRestaurantId) || !sessionId) {
+        console.log('Invalid parameters:', { tableId, restaurantId, sessionId });
+        return res.status(400).json({ message: "Invalid parameters" });
+      }
+
       // First verify the table belongs to the restaurant
       const [table] = await db.query.tables.findMany({
         where: and(
-          eq(tables.id, Number(tableId)),
-          eq(tables.restaurantId, Number(restaurantId))
+          eq(tables.id, parsedTableId),
+          eq(tables.restaurantId, parsedRestaurantId)
         ),
       });
 
       if (!table) {
-        console.log(`Table ${tableId} not found in restaurant ${restaurantId}`);
+        console.log(`Table ${parsedTableId} not found in restaurant ${parsedRestaurantId}`);
         return res.status(404).json({ message: "Table not found in this restaurant" });
       }
 
       // Now get requests for this table and session
       const allRequests = await db.query.requests.findMany({
         where: and(
-          eq(requests.tableId, Number(tableId)),
+          eq(requests.tableId, parsedTableId),
           eq(requests.sessionId, sessionId as string)
         ),
         with: {
@@ -378,7 +387,7 @@ export function registerRoutes(app: Express): Server {
         }
       });
 
-      console.log(`Found ${allRequests.length} requests for table ${tableId}`);
+      console.log(`Found ${allRequests.length} requests for table ${parsedTableId}`);
       res.json(allRequests);
     } catch (error) {
       console.error('Error fetching requests:', error);
