@@ -169,9 +169,11 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-    // Add specific endpoint to verify table exists
-  app.get("/api/restaurants/:restaurantId/tables/:tableId/verify", async (req, res) => {
+  // Add specific endpoint to verify table exists
+  app.get("/api/restaurants/:restaurantId/tables/:tableId", async (req, res) => {
     const { restaurantId, tableId } = req.params;
+
+    console.log(`Verifying table ${tableId} for restaurant ${restaurantId}`);
 
     try {
       const [table] = await db.query.tables.findMany({
@@ -181,17 +183,20 @@ export function registerRoutes(app: Express): Server {
         ),
       });
 
+      console.log('Found table:', table);
+
       if (!table) {
+        console.log('Table not found');
         return res.status(404).json({ message: "Table not found" });
       }
 
-      res.json({ valid: true, table });
+      // Return the table data
+      res.json(table);
     } catch (error) {
       console.error('Error verifying table:', error);
       res.status(500).json({ message: "Failed to verify table" });
     }
   });
-
 
   app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
     const { restaurantId, tableId } = req.params;

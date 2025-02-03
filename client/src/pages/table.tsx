@@ -129,6 +129,7 @@ export default function TablePage() {
             description: error.message || "This table appears to be invalid or no longer exists.",
             variant: "destructive",
           });
+          setIsValid(false);
         })
         .finally(() => {
           setIsValidating(false);
