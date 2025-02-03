@@ -13,11 +13,11 @@ import { ProtectedRoute } from "@/lib/protected-route";
 function Router() {
   return (
     <Switch>
+      {/* Make sure this route comes before the redirect */}
+      <Route path="/request/:restaurantId/:tableId" component={TablePage} />
       <Route path="/">
         <Redirect to="/admin" />
       </Route>
-      {/* Make sure this route comes before protected routes */}
-      <Route path="/request/:restaurantId/:tableId" component={TablePage} />
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/admin" component={AdminPage} />
       <ProtectedRoute path="/qr" component={QRPage} />
