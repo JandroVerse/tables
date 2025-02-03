@@ -90,6 +90,7 @@ export default function TablePage() {
         .then(async (res) => {
           if (!res.ok) throw new Error("Invalid table");
           const tableData = await res.json();
+          console.log('Fetched table data:', tableData);
           setTableData(tableData);
           setIsValid(true);
 
