@@ -228,6 +228,26 @@ const DraggableTable = ({
   );
 };
 
+interface TablePreviewCardProps {
+  table: TableWithPosition;
+  onClose: () => void;
+}
+
+function TablePreviewCard({ table, onClose }: TablePreviewCardProps) {
+  return (
+    <Card className="max-w-sm">
+      <CardHeader>
+        <CardTitle>{table.name}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="w-full" dangerouslySetInnerHTML={{ __html: table.qrCode }} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 interface FloorPlanEditorProps {
   restaurantId: number;
 }
@@ -259,16 +279,27 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
     },
   });
 
-  const { mutate: createTable } = useMutation({
+    const { mutate: createTable } = useMutation({
     mutationFn: async ({ name, position }: { name: string; position: TablePosition }) => {
-      return apiRequest("POST", `/api/restaurants/${restaurantId}/tables`, { name, position });
+      const res = await apiRequest("POST", `/api/restaurants/${restaurantId}/tables`, { name, position });
+      if (!res.ok) {
+        throw new Error("Failed to create table");
+      }
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (newTable) => {
       queryClient.invalidateQueries({ queryKey: [`/api/restaurants/${restaurantId}/tables`] });
-      setNewTableName("");
       toast({
         title: "Success",
         description: "Table created successfully",
+      });
+      setNewTableName("");
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
       });
     },
   });
