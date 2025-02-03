@@ -5,14 +5,14 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { users, insertUserSchema, type SelectUser } from "@db/schema";
+import { users, type User } from "@db/schema";
 import { db, pool } from "@db";
 import { eq } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
 
 declare global {
   namespace Express {
-    interface User extends SelectUser {}
+    interface User extends User {}
   }
 }
 
@@ -77,7 +77,7 @@ export function setupAuth(app: Express) {
     }),
   );
 
-  passport.serializeUser((user, done) => done(null, user.id));
+  passport.serializeUser((user: any, done) => done(null, user.id));
   passport.deserializeUser(async (id: number, done) => {
     try {
       const [user] = await db
@@ -96,29 +96,27 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/register", async (req, res, next) => {
-    const result = insertUserSchema.safeParse(req.body);
-    if (!result.success) {
-      const error = fromZodError(result.error);
-      return res.status(400).send(error.toString());
+    try {
+      const [existingUser] = await getUserByUsername(req.body.username);
+      if (existingUser) {
+        return res.status(400).send("Username already exists");
+      }
+
+      const [user] = await db
+        .insert(users)
+        .values({
+          ...req.body,
+          password: await hashPassword(req.body.password),
+        })
+        .returning();
+
+      req.login(user, (err) => {
+        if (err) return next(err);
+        res.status(201).json(user);
+      });
+    } catch (error) {
+      next(error);
     }
-
-    const [existingUser] = await getUserByUsername(result.data.username);
-    if (existingUser) {
-      return res.status(400).send("Username already exists");
-    }
-
-    const [user] = await db
-      .insert(users)
-      .values({
-        ...result.data,
-        password: await hashPassword(result.data.password),
-      })
-      .returning();
-
-    req.login(user, (err) => {
-      if (err) return next(err);
-      res.status(201).json(user);
-    });
   });
 
   app.post("/api/login", passport.authenticate("local"), (req, res) => {

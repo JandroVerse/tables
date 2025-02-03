@@ -51,6 +51,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/logout");
+      if (!res.ok) {
+        throw new Error("Logout failed");
+      }
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(["/api/user"], null);
+      queryClient.clear();  // Clear all queries
+      setLocation("/auth");  // Redirect to auth page
+      toast({
+        title: "Logged out",
+        description: "You have been logged out successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Logout failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      console.error("Logout error:", error);
+    },
+  });
+
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
       const res = await apiRequest("POST", "/api/login", credentials);
@@ -94,31 +120,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onError: (error: Error) => {
       toast({
         title: "Registration failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/logout");
-      if (!res.ok) {
-        throw new Error("Logout failed");
-      }
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(["/api/user"], null);
-      queryClient.clear();  // Clear all queries
-      setLocation("/auth");  // Redirect to auth page
-      toast({
-        title: "Logged out",
-        description: "You have been logged out successfully.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Logout failed",
         description: error.message,
         variant: "destructive",
       });
