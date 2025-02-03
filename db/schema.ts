@@ -135,6 +135,7 @@ export const tableSessionRelations = relations(tableSessions, ({ one, many }) =>
   requests: many(requests),
 }));
 
+
 export const requestRelations = relations(requests, ({ one, many }) => ({
   table: one(tables, {
     fields: [requests.tableId],
