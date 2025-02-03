@@ -139,12 +139,20 @@ export default function TablePage() {
 
   useEffect(() => {
     wsService.connect();
+    console.log('Table page: Connecting to WebSocket service');
+
     const unsubscribe = wsService.subscribe((data) => {
+      console.log('Table page: Received WebSocket event', data);
       if (data.type === "new_request" || data.type === "update_request") {
+        console.log('Table page: Invalidating requests query due to WebSocket event');
         queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      console.log('Table page: Unsubscribing from WebSocket service');
+      unsubscribe();
+    };
   }, [tableId, queryClient, restaurantId]);
 
   const { data: requests = [] } = useQuery<Request[]>({
@@ -164,43 +172,47 @@ export default function TablePage() {
 
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
+      console.log('Creating request: Starting mutation', { type, notes });
+
       if (!sessionId) {
-        console.error('No active session');
+        console.error('Creating request: No active session');
         throw new Error("No active session");
       }
+
       if (!restaurantId || !tableId) {
-        console.error('Invalid table or restaurant', { restaurantId, tableId });
+        console.error('Creating request: Invalid table or restaurant', { restaurantId, tableId });
         throw new Error("Invalid table or restaurant");
       }
 
-      console.log('Creating request with params:', {
-        tableId,
-        restaurantId,
-        sessionId,
-        type,
-        notes
-      });
-
-      const response = await apiRequest("POST", "/api/requests", {
+      const requestData = {
         tableId: Number(tableId),
         restaurantId: Number(restaurantId),
         sessionId,
         type,
         notes,
-      });
+      };
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Request creation failed:', errorText);
-        throw new Error(errorText || "Failed to create request");
+      console.log('Creating request: Sending request with data', requestData);
+
+      try {
+        const response = await apiRequest("POST", "/api/requests", requestData);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Creating request: Request failed', errorText);
+          throw new Error(errorText || "Failed to create request");
+        }
+
+        const data = await response.json();
+        console.log('Creating request: Request successful', data);
+        return data;
+      } catch (error) {
+        console.error('Creating request: Request error', error);
+        throw error;
       }
-
-      const data = await response.json();
-      console.log('Request created successfully:', data);
-      return data;
     },
     onSuccess: (data) => {
-      console.log('Request mutation succeeded:', data);
+      console.log('Creating request: Mutation succeeded', data);
       queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       setOtherRequestNote("");
       setIsDialogOpen(false);
@@ -208,9 +220,15 @@ export default function TablePage() {
         title: "Request sent",
         description: "Staff has been notified of your request.",
       });
+      // Notify through WebSocket
+      wsService.send({
+        type: "new_request",
+        tableId,
+        restaurantId,
+      });
     },
     onError: (error: Error) => {
-      console.error('Request mutation failed:', error);
+      console.error('Creating request: Mutation failed', error);
       toast({
         title: "Error",
         description: error.message || "Failed to send request. Please try again.",
