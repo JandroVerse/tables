@@ -301,7 +301,8 @@ export default function TablePage() {
         type: "new_request" as const,
         tableId,
         restaurantId,
-        request: data
+        request: data,
+        broadcast: true // Enable broadcasting to all restaurant clients
       };
       console.log('Creating request: Sending WebSocket notification', wsMessage);
       wsService.send(wsMessage);

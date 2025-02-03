@@ -8,8 +8,24 @@ import QRCode from "qrcode";
 import { nanoid } from "nanoid";
 import { setupAuth } from "./auth";
 
-// Keep track of WebSocket clients by session
+// Keep track of WebSocket clients by session and restaurant
 const clientsBySession = new Map<string, Set<WebSocket>>();
+const clientsByRestaurant = new Map<number, Set<WebSocket>>();
+
+// Keep track of client types
+const clientTypes = new Map<WebSocket, { type: 'customer' | 'admin', restaurantId?: number }>();
+
+function broadcastToRestaurant(restaurantId: number, message: any) {
+  const clients = clientsByRestaurant.get(restaurantId);
+  if (clients) {
+    const messageStr = JSON.stringify(message);
+    clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(messageStr);
+      }
+    });
+  }
+}
 
 async function verifyTableAccess(restaurantId: number, tableId: number) {
   const [table] = await db.query.tables.findMany({
@@ -51,7 +67,7 @@ function ensureAuthenticated(req: Express.Request, res: Express.Response, next: 
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
-  const wss = new WebSocketServer({ 
+  const wss = new WebSocketServer({
     server: httpServer,
     verifyClient: ({ req }) => {
       if (req.headers['sec-websocket-protocol'] === 'vite-hmr') {
@@ -85,13 +101,19 @@ export function registerRoutes(app: Express): Server {
   // WebSocket setup section
   wss.on("connection", (ws: WebSocket, req: any) => {
     const sessionId = req.sessionId;
-    console.log("WebSocket: New connection with session ID:", sessionId);
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const clientType = url.searchParams.get('clientType') as 'customer' | 'admin';
+
+    console.log("WebSocket: New connection with session ID:", sessionId, "Type:", clientType);
 
     // Add client to session group
     if (!clientsBySession.has(sessionId)) {
       clientsBySession.set(sessionId, new Set());
     }
     clientsBySession.get(sessionId)!.add(ws);
+
+    // Store client type
+    clientTypes.set(ws, { type: clientType });
 
     ws.on("message", async (message: string) => {
       try {
@@ -104,15 +126,32 @@ export function registerRoutes(app: Express): Server {
           return;
         }
 
-        // Only broadcast to clients in the same session
-        const sessionClients = clientsBySession.get(sessionId);
-        if (sessionClients) {
-          console.log(`WebSocket: Broadcasting to ${sessionClients.size} clients in session ${sessionId}`);
-          sessionClients.forEach((client) => {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-              client.send(message);
-            }
-          });
+        // If it's an admin client and restaurantId is provided, add to restaurant group
+        if (data.clientType === 'admin' && data.restaurantId) {
+          if (!clientsByRestaurant.has(data.restaurantId)) {
+            clientsByRestaurant.set(data.restaurantId, new Set());
+          }
+          clientsByRestaurant.get(data.restaurantId)!.add(ws);
+          clientTypes.get(ws)!.restaurantId = data.restaurantId;
+        }
+
+        // Handle broadcasting based on message type and client type
+        if (data.broadcast) {
+          // Broadcast to all clients in the restaurant
+          if (data.restaurantId) {
+            broadcastToRestaurant(data.restaurantId, data);
+          }
+        } else {
+          // Only broadcast to clients in the same session
+          const sessionClients = clientsBySession.get(sessionId);
+          if (sessionClients) {
+            console.log(`WebSocket: Broadcasting to ${sessionClients.size} clients in session ${sessionId}`);
+            sessionClients.forEach((client) => {
+              if (client !== ws && client.readyState === WebSocket.OPEN) {
+                client.send(message);
+              }
+            });
+          }
         }
       } catch (error) {
         console.error("WebSocket: Failed to process message:", error);
@@ -121,13 +160,30 @@ export function registerRoutes(app: Express): Server {
 
     ws.on("close", () => {
       console.log("WebSocket: Client disconnected from session:", sessionId);
-      const clients = clientsBySession.get(sessionId);
-      if (clients) {
-        clients.delete(ws);
-        if (clients.size === 0) {
+
+      // Remove from session group
+      const sessionClients = clientsBySession.get(sessionId);
+      if (sessionClients) {
+        sessionClients.delete(ws);
+        if (sessionClients.size === 0) {
           clientsBySession.delete(sessionId);
         }
       }
+
+      // Remove from restaurant group if applicable
+      const clientInfo = clientTypes.get(ws);
+      if (clientInfo?.restaurantId) {
+        const restaurantClients = clientsByRestaurant.get(clientInfo.restaurantId);
+        if (restaurantClients) {
+          restaurantClients.delete(ws);
+          if (restaurantClients.size === 0) {
+            clientsByRestaurant.delete(clientInfo.restaurantId);
+          }
+        }
+      }
+
+      // Clean up client type
+      clientTypes.delete(ws);
     });
   });
 
@@ -227,7 +283,7 @@ export function registerRoutes(app: Express): Server {
       const tableUrl = `https://${domain}/table/${restaurantId}/${table.id}`;
       console.log('Generating QR code for URL:', tableUrl);
 
-      const qrCodeSvg = await QRCode.toString(tableUrl, { 
+      const qrCodeSvg = await QRCode.toString(tableUrl, {
         type: 'svg',
         width: 256,
         margin: 4,
@@ -265,7 +321,7 @@ export function registerRoutes(app: Express): Server {
       res.json(table);
     } catch (error) {
       console.error('Error verifying table:', error);
-      res.status(404).json({ 
+      res.status(404).json({
         message: error instanceof Error ? error.message : "Table not found or invalid restaurant"
       });
     }
@@ -309,9 +365,9 @@ export function registerRoutes(app: Express): Server {
       // Broadcast the update to all connected clients
       wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ 
-            type: "update_table", 
-            table: updatedTable 
+          client.send(JSON.stringify({
+            type: "update_table",
+            table: updatedTable
           }));
         }
       });
@@ -352,10 +408,10 @@ export function registerRoutes(app: Express): Server {
 
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ 
-          type: "delete_table", 
+        client.send(JSON.stringify({
+          type: "delete_table",
           tableId,
-          restaurantId 
+          restaurantId
         }));
       }
     });
@@ -412,7 +468,7 @@ export function registerRoutes(app: Express): Server {
       });
     } catch (error) {
       console.error('Error managing session:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: "Failed to manage session",
         error: error instanceof Error ? error.message : String(error)
       });
@@ -519,7 +575,7 @@ export function registerRoutes(app: Express): Server {
       res.json(request);
     } catch (error) {
       console.error('Error creating request:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: "Failed to create request",
         error: error instanceof Error ? error.message : String(error)
       });
@@ -561,8 +617,8 @@ export function registerRoutes(app: Express): Server {
     }
 
     if (request.status !== "completed") {
-      return res.status(400).json({ 
-        message: "Can only provide feedback for completed requests" 
+      return res.status(400).json({
+        message: "Can only provide feedback for completed requests"
       });
     }
 
@@ -571,8 +627,8 @@ export function registerRoutes(app: Express): Server {
     });
 
     if (existingFeedback) {
-      return res.status(400).json({ 
-        message: "Feedback already submitted for this request" 
+      return res.status(400).json({
+        message: "Feedback already submitted for this request"
       });
     }
 
@@ -586,9 +642,9 @@ export function registerRoutes(app: Express): Server {
 
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ 
-          type: "new_feedback", 
-          feedback: newFeedback 
+        client.send(JSON.stringify({
+          type: "new_feedback",
+          feedback: newFeedback
         }));
       }
     });
