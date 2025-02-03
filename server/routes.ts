@@ -150,6 +150,7 @@ export function registerRoutes(app: Express): Server {
         .where(eq(tables.id, table.id))
         .returning();
 
+      console.log('Updated table with QR code:', updatedTable.id);
       res.json(updatedTable);
     } catch (error) {
       console.error('Error in table creation/QR generation:', error);
