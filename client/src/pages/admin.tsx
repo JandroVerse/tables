@@ -165,7 +165,11 @@ export default function AdminPage() {
         transition={{ duration: 0.5 }}
       >
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Restaurant Admin Dashboard</h1>
+          <h1 className="text-2xl font-bold">
+            {currentRestaurant 
+              ? `${currentRestaurant.name} Dashboard`
+              : "Restaurant Admin Dashboard"}
+          </h1>
           <Link href="/qr">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button variant="outline">View QR Codes</Button>
