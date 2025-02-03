@@ -31,28 +31,30 @@ import type { Request } from "@db/schema";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedBackground } from "@/components/animated-background";
+import { useParams } from "wouter";
 
 const cardVariants = {
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, x: -20 }
+  exit: { opacity: 0, x: -20 },
 };
 
 const buttonVariants = {
   idle: { scale: 1 },
   hover: { scale: 1.05 },
-  tap: { scale: 0.95 }
+  tap: { scale: 0.95 },
 };
 
 const statusVariants = {
   pending: { color: "#71717a" },
   in_progress: { color: "#059669" },
-  completed: { color: "#0284c7" }
+  completed: { color: "#0284c7" },
 };
 
-export default function TablePage({ params }: { params: { restaurantId: string, tableId: string } }) {
+export default function TablePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const params = useParams();
   const restaurantId = Number(params.restaurantId);
   const tableId = Number(params.tableId);
   const [otherRequestNote, setOtherRequestNote] = useState("");
@@ -68,8 +70,8 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
   useEffect(() => {
     if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
       fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`)
-        .then(res => res.json())
-        .then(data => {
+        .then((res) => res.json())
+        .then((data) => {
           if (data.valid) {
             setIsValid(true);
             // Only create session if table is valid
@@ -77,7 +79,7 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
           }
           throw new Error("Invalid table");
         })
-        .then(res => res.json())
+        .then((res) => res.json())
         .then((session) => {
           setSessionId(session.sessionId);
           queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
@@ -111,7 +113,7 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
     queryFn: async () => {
       if (!sessionId) return [];
       const res = await fetch(`/api/requests?tableId=${tableId}&sessionId=${sessionId}`);
-      if (!res.ok) throw new Error('Failed to fetch requests');
+      if (!res.ok) throw new Error("Failed to fetch requests");
       return res.json();
     },
     enabled: !!tableId && !isNaN(tableId) && !!sessionId,
@@ -119,12 +121,12 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
 
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
-      if (!sessionId) throw new Error('No active session');
+      if (!sessionId) throw new Error("No active session");
       const response = await apiRequest("POST", "/api/requests", {
         tableId,
         type,
         notes,
-        sessionId
+        sessionId,
       });
       return response.json();
     },
@@ -168,7 +170,7 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
     },
   });
 
-    if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
+  if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card>
@@ -198,7 +200,7 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
     );
   }
 
-    if (!isValid) {
+  if (!isValid) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card>
@@ -217,13 +219,14 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
 
   const hasActiveRequest = (type: string) => {
     return requests.some(
-      (request) => request.type === type &&
-      request.status !== "completed" &&
-      request.status !== "cleared"
+      (request) =>
+        request.type === type &&
+        request.status !== "completed" &&
+        request.status !== "cleared"
     );
   };
 
-    const handleOtherRequest = () => {
+  const handleOtherRequest = () => {
     if (!otherRequestNote.trim()) {
       toast({
         title: "Error",
@@ -278,7 +281,11 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                       size="lg"
                       className="h-28 w-full flex flex-col items-center justify-center space-y-3"
                       disabled={hasActiveRequest("waiter")}
-                      title={hasActiveRequest("waiter") ? "Waiter request is being processed" : ""}
+                      title={
+                        hasActiveRequest("waiter")
+                          ? "Waiter request is being processed"
+                          : ""
+                      }
                     >
                       <Bell className="h-8 w-8" />
                       <span className="font-medium">Call Waiter</span>
@@ -315,7 +322,11 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                     className="h-28 w-full flex flex-col items-center justify-center space-y-3"
                     onClick={() => setIsWaterDialogOpen(true)}
                     disabled={hasActiveRequest("water")}
-                    title={hasActiveRequest("water") ? "Water refill request is being processed" : ""}
+                    title={
+                      hasActiveRequest("water")
+                        ? "Water refill request is being processed"
+                        : ""
+                    }
                   >
                     <GlassWater className="h-8 w-8" />
                     <span className="font-medium">Water Refill</span>
@@ -353,7 +364,9 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                       onClick={() => {
                         createRequest({
                           type: "water",
-                          notes: `${waterCount} water${waterCount > 1 ? 's' : ''}`
+                          notes: `${waterCount} water${
+                            waterCount > 1 ? "s" : ""
+                          }`,
                         });
                         setIsWaterDialogOpen(false);
                         setWaterCount(1);
@@ -377,7 +390,11 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                       size="lg"
                       className="h-28 w-full flex flex-col items-center justify-center space-y-3"
                       disabled={hasActiveRequest("check")}
-                      title={hasActiveRequest("check") ? "Check request is being processed" : ""}
+                      title={
+                        hasActiveRequest("check")
+                          ? "Check request is being processed"
+                          : ""
+                      }
                     >
                       <Receipt className="h-8 w-8" />
                       <span className="font-medium">Get Check</span>
@@ -421,7 +438,9 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                 </motion.div>
                 <DialogContent>
                   <DialogHeader className="p-6 pb-0">
-                    <DialogTitle className="text-xl font-semibold">Other Request</DialogTitle>
+                    <DialogTitle className="text-xl font-semibold">
+                      Other Request
+                    </DialogTitle>
                   </DialogHeader>
                   <div className="px-6 py-4">
                     <div className="space-y-3">
@@ -458,7 +477,9 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                   <AnimatePresence mode="popLayout">
                     <div className="space-y-3">
                       {requests
-                        .filter((r) => r.status !== "completed" && r.status !== "cleared")
+                        .filter(
+                          (r) => r.status !== "completed" && r.status !== "cleared"
+                        )
                         .map((request) => (
                           <motion.div
                             key={request.id}
@@ -469,22 +490,28 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                             exit="exit"
                             transition={{
                               layout: { duration: 0.3 },
-                              opacity: { duration: 0.2 }
+                              opacity: { duration: 0.2 },
                             }}
                           >
-                            <Card className={`overflow-hidden transition-colors ${
-                              request.type === "waiter" 
-                                ? "hover:bg-purple-300 bg-purple-200" 
-                                : request.type === "water"
-                                ? "hover:bg-blue-200 bg-blue-100"
-                                : request.type === "check"
-                                ? "hover:bg-emerald-300 bg-emerald-200"
-                                : "hover:bg-green-50/50"
-                            }`}>
+                            <Card
+                              className={`overflow-hidden transition-colors ${
+                                request.type === "waiter"
+                                  ? "hover:bg-purple-300 bg-purple-200"
+                                  : request.type === "water"
+                                  ? "hover:bg-blue-200 bg-blue-100"
+                                  : request.type === "check"
+                                  ? "hover:bg-emerald-300 bg-emerald-200"
+                                  : "hover:bg-green-50/50"
+                              }`}
+                            >
                               <CardContent className="p-4">
-                                <div className="font-medium text-primary">{request.type}</div>
+                                <div className="font-medium text-primary">
+                                  {request.type}
+                                </div>
                                 {request.notes && (
-                                  <div className="text-sm text-gray-600 mt-2">{request.notes}</div>
+                                  <div className="text-sm text-gray-600 mt-2">
+                                    {request.notes}
+                                  </div>
                                 )}
                                 <div className="flex justify-between items-center mt-2">
                                   <motion.div
@@ -493,7 +520,10 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                                     animate={request.status}
                                     transition={{ duration: 0.3 }}
                                   >
-                                    Status: <span className="capitalize">{request.status.replace('_', ' ')}</span>
+                                    Status:{" "}
+                                    <span className="capitalize">
+                                      {request.status.replace("_", " ")}
+                                    </span>
                                   </motion.div>
                                   {request.status === "pending" && (
                                     <AlertDialog>
@@ -511,15 +541,23 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                                       </AlertDialogTrigger>
                                       <AlertDialogContent>
                                         <AlertDialogHeader>
-                                          <AlertDialogTitle>Cancel Request?</AlertDialogTitle>
+                                          <AlertDialogTitle>
+                                            Cancel Request?
+                                          </AlertDialogTitle>
                                           <AlertDialogDescription>
-                                            Are you sure you want to cancel this request? This action cannot be undone.
+                                            Are you sure you want to cancel this
+                                            request? This action cannot be
+                                            undone.
                                           </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
-                                          <AlertDialogCancel>No, keep it</AlertDialogCancel>
+                                          <AlertDialogCancel>
+                                            No, keep it
+                                          </AlertDialogCancel>
                                           <AlertDialogAction
-                                            onClick={() => cancelRequest(request.id)}
+                                            onClick={() =>
+                                              cancelRequest(request.id)
+                                            }
                                           >
                                             Yes, cancel it
                                           </AlertDialogAction>
@@ -550,17 +588,23 @@ export default function TablePage({ params }: { params: { restaurantId: string, 
                             exit="exit"
                             transition={{
                               layout: { duration: 0.3 },
-                              opacity: { duration: 0.2 }
+                              opacity: { duration: 0.2 },
                             }}
                           >
                             <Card className="overflow-hidden transition-colors hover:bg-green-50/50">
                               <CardContent className="p-4">
-                                <div className="font-medium text-primary">{request.type}</div>
+                                <div className="font-medium text-primary">
+                                  {request.type}
+                                </div>
                                 {request.notes && (
-                                  <div className="text-sm text-gray-600 mt-2">{request.notes}</div>
+                                  <div className="text-sm text-gray-600 mt-2">
+                                    {request.notes}
+                                  </div>
                                 )}
                                 <div className="flex justify-between items-center mt-3">
-                                  <div className="text-sm text-gray-500">Completed</div>
+                                  <div className="text-sm text-gray-500">
+                                    Completed
+                                  </div>
                                   <motion.div
                                     variants={buttonVariants}
                                     initial="idle"
