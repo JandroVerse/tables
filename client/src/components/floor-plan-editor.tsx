@@ -87,7 +87,6 @@ const snapToGrid = (value: number): number => {
   return Math.round(value / GRID_SIZE) * GRID_SIZE;
 };
 
-
 const DraggableTable = ({
   table,
   onDragStop,
@@ -108,6 +107,28 @@ const DraggableTable = ({
   });
   const [resizing, setResizing] = useState(false);
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
+    const [hasLongWaitingRequest, setHasLongWaitingRequest] = useState(false);
+
+    useEffect(() => {
+        const checkLongWaitingRequests = () => {
+          const now = new Date().getTime();
+          const longWaitingRequest = activeRequests.some(request => {
+            if (request.status === "pending") {
+              const requestTime = new Date(request.createdAt).getTime();
+              const waitTime = now - requestTime;
+              return waitTime > 5 * 60 * 1000;
+            }
+            return false;
+          });
+          setHasLongWaitingRequest(longWaitingRequest);
+        };
+
+        checkLongWaitingRequests();
+
+        const interval = setInterval(checkLongWaitingRequests, 30000);
+
+        return () => clearInterval(interval);
+      }, [activeRequests]);
 
   const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     if (!editMode) return;
@@ -184,11 +205,13 @@ const DraggableTable = ({
       grid={[GRID_SIZE, GRID_SIZE]}
       bounds="parent"
     >
-      <div
+      <motion.div
         className={`absolute cursor-move ${
           table.position.shape === "round" ? "rounded-full" : "rounded-lg"
         } ${
           selected ? "ring-2 ring-primary" : ""
+        } ${
+          hasLongWaitingRequest ? "animate-pulse-glow" : ""
         } bg-green-100 hover:bg-green-200 transition-colors`}
         style={{
           width: size.width,
@@ -302,7 +325,7 @@ const DraggableTable = ({
             </AnimatePresence>
           </div>
         </div>
-      </div>
+      </motion.div>
     </Draggable>
   );
 };
