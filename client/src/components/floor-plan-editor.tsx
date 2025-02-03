@@ -30,7 +30,6 @@ import { useToast } from "@/hooks/use-toast";
 import type { Table, Request } from "@db/schema";
 import { motion, AnimatePresence } from "framer-motion";
 import { QuickRequestPreview } from "./quick-request-preview";
-import { TablePreview } from "./table-3d-preview";
 
 interface TablePosition {
   x: number;
@@ -425,49 +424,37 @@ export function FloorPlanEditor() {
             <Button onClick={handleAddTable}>Add Table</Button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
-              <div
-                ref={editorRef}
-                className="relative h-[600px] border rounded-lg bg-gray-50"
-                onClick={() => setSelectedTable(null)}
-              >
-                {tables.map((table) => (
-                  <DraggableTable
-                    key={table.id}
-                    table={table}
-                    onDragStop={handleTableDragStop}
-                    onResize={handleTableResize}
-                    onDelete={deleteTable}
-                    selected={selectedTable === table.id}
-                    onClick={() => handleTableClick(table.id)}
-                    activeRequests={getActiveRequests(table.id)}
-                    editMode={editMode}
-                  />
-                ))}
-              </div>
+          <div className="relative">
+            <div
+              ref={editorRef}
+              className="relative h-[600px] border rounded-lg bg-gray-50"
+              onClick={() => setSelectedTable(null)}
+            >
+              {tables.map((table) => (
+                <DraggableTable
+                  key={table.id}
+                  table={table}
+                  onDragStop={handleTableDragStop}
+                  onResize={handleTableResize}
+                  onDelete={deleteTable}
+                  selected={selectedTable === table.id}
+                  onClick={() => handleTableClick(table.id)}
+                  activeRequests={getActiveRequests(table.id)}
+                  editMode={editMode}
+                />
+              ))}
             </div>
 
-            {editMode && selectedTableData && (
-              <div className="lg:col-span-1">
-                <TablePreview
-                  shape={selectedTableData.position.shape}
-                  width={selectedTableData.position.width}
-                  height={selectedTableData.position.height}
-                />
-              </div>
-            )}
+            <QuickRequestPreview
+              table={selectedTableData}
+              activeRequests={selectedTable ? getActiveRequests(selectedTable) : []}
+              open={showRequestPreview}
+              onClose={() => {
+                setShowRequestPreview(false);
+                setSelectedTable(null);
+              }}
+            />
           </div>
-
-          <QuickRequestPreview
-            table={selectedTableData}
-            activeRequests={selectedTable ? getActiveRequests(selectedTable) : []}
-            open={showRequestPreview}
-            onClose={() => {
-              setShowRequestPreview(false);
-              setSelectedTable(null);
-            }}
-          />
         </div>
       </CardContent>
     </Card>
