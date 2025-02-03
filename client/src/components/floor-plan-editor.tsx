@@ -83,27 +83,12 @@ const DraggableTable = ({
     x: table.position.x || 0,
     y: table.position.y || 0,
   });
-  const [isResizing, setIsResizing] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-
-  useEffect(() => {
-    // Update local state when table position changes from props
-    if (!isResizing && !isDragging) {
-      setSize({
-        width: table.position.width || 100,
-        height: table.position.height || 100,
-      });
-      setPosition({
-        x: table.position.x || 0,
-        y: table.position.y || 0,
-      });
-    }
-  }, [table.position, isResizing, isDragging]);
+  const [resizing, setResizing] = useState(false);
 
   const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     if (!editMode) return;
     e.stopPropagation();
-    setIsResizing(true);
+    setResizing(true);
 
     const startX = e.clientX;
     const startY = e.clientY;
@@ -111,67 +96,51 @@ const DraggableTable = ({
     const startHeight = size.height;
 
     const handleMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      let newWidth = startWidth;
-      let newHeight = startHeight;
+      // Simple resize logic - just add the mouse movement to the dimensions
+      let newWidth = direction.includes('right') 
+        ? Math.min(300, Math.max(80, startWidth + dx))
+        : Math.min(300, Math.max(80, startWidth - dx));
 
-      if (direction.includes('right')) {
-        newWidth = Math.min(300, Math.max(80, startWidth + dx));
-      } else if (direction.includes('left')) {
-        newWidth = Math.min(300, Math.max(80, startWidth - dx));
-      }
-
-      if (direction.includes('bottom')) {
-        newHeight = Math.min(300, Math.max(80, startHeight + dy));
-      } else if (direction.includes('top')) {
-        newHeight = Math.min(300, Math.max(80, startHeight - dy));
-      }
+      let newHeight = direction.includes('bottom')
+        ? Math.min(300, Math.max(80, startHeight + dy))
+        : Math.min(300, Math.max(80, startHeight - dy));
 
       setSize({ width: newWidth, height: newHeight });
     };
 
-    const handleUp = () => {
-      if (!isResizing) return;
-      setIsResizing(false);
+    const handleEnd = () => {
+      if (!resizing) return;
 
-      // Update backend with final dimensions
+      setResizing(false);
+      // Important: Update the table position with both size and position
       const updatedPosition = {
         ...table.position,
         width: size.width,
         height: size.height,
+        x: position.x,
+        y: position.y,
       };
-      onResize(table.id, updatedPosition);
+
+      // Send the complete position update to the backend
+      updateTablePosition({ id: table.id, position: updatedPosition });
 
       window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
+      window.removeEventListener('mouseup', handleEnd);
     };
 
     window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-  };
-
-  const handleDragStart = () => {
-    if (!editMode || isResizing) return;
-    setIsDragging(true);
-  };
-
-  const handleDragStop = (e: MouseEvent | TouchEvent | PointerEvent, data: { x: number; y: number }) => {
-    if (isResizing) return;
-    setIsDragging(false);
-    onDragStop(table.id, data);
+    window.addEventListener('mouseup', handleEnd);
   };
 
   return (
     <Draggable
       position={position}
-      onStart={handleDragStart}
       onDrag={(e, data) => setPosition({ x: data.x, y: data.y })}
-      onStop={handleDragStop}
-      disabled={isResizing || !editMode}
+      onStop={(e, data) => onDragStop(table.id, data)}
+      disabled={resizing || !editMode}
       bounds="parent"
     >
       <div
@@ -184,14 +153,10 @@ const DraggableTable = ({
           width: size.width,
           height: size.height,
           touchAction: 'none',
-          cursor: isResizing ? 'resize' : isDragging ? 'grabbing' : 'grab',
-          userSelect: 'none',
         }}
         onClick={(e) => {
-          if (!isResizing && !isDragging) {
-            e.stopPropagation();
-            onClick();
-          }
+          e.stopPropagation();
+          onClick();
         }}
       >
         {/* Table content */}
@@ -200,7 +165,7 @@ const DraggableTable = ({
         </div>
 
         {/* Resize handles */}
-        {editMode && !isDragging && (
+        {editMode && (
           <>
             <div
               className="absolute -top-1 -right-1 w-3 h-3 cursor-ne-resize rounded-full bg-primary hover:opacity-100 opacity-50"
@@ -221,8 +186,8 @@ const DraggableTable = ({
           </>
         )}
 
-        {/* Delete button */}
-        {editMode && !isDragging && !isResizing && (
+        {/* Rest of the components remain unchanged */}
+        {editMode && (
           <div className="absolute -top-8 left-1/2 -translate-x-1/2">
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -359,25 +324,24 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
     const updatedPosition = {
       ...table.position,
-      x: Math.round(x),
-      y: Math.round(y),
+      x,
+      y,
     };
 
     updateTablePosition({ id: tableId, position: updatedPosition });
   };
 
-  const handleTableResize = (tableId: number, updatedPosition: TablePosition) => {
+  const handleTableResize = (tableId: number, { width, height }: { width: number; height: number }) => {
     const table = tables.find((t) => t.id === tableId);
     if (!table) return;
 
-    updateTablePosition({ 
-      id: tableId, 
-      position: {
-        ...updatedPosition,
-        width: Math.round(updatedPosition.width),
-        height: Math.round(updatedPosition.height),
-      }
-    });
+    const updatedPosition = {
+      ...table.position,
+      width,
+      height,
+    };
+
+    updateTablePosition({ id: tableId, position: updatedPosition });
   };
 
   const handleAddTable = () => {
