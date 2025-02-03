@@ -110,30 +110,38 @@ export function registerRoutes(app: Express): Server {
       return res.status(404).json({ message: "Restaurant not found" });
     }
 
-    // First create the table with a temporary empty QR code
-    const [table] = await db.insert(tables)
-      .values({
-        name,
-        restaurantId: Number(restaurantId),
-        qrCode: '',
-        position,
-      })
-      .returning();
-
-    // Generate QR code with restaurant context and table ID
     try {
-      const qrCodeSvg = await QRCode.toString(
-        `${process.env.REPLIT_DOMAINS?.split(",")[0]}/table/${restaurantId}/${table.id}`,
-        { 
-          type: 'svg',
-          width: 256,
-          margin: 4,
-          color: {
-            dark: '#000000',
-            light: '#ffffff'
-          }
+      // Generate QR code URL using current domain
+      const domain = process.env.REPLIT_DOMAINS?.split(",")[0] || req.get('host');
+      console.log('Using domain for QR:', domain);
+
+      // First create the table
+      const [table] = await db.insert(tables)
+        .values({
+          name,
+          restaurantId: Number(restaurantId),
+          qrCode: '', // Temporary empty QR code
+          position,
+        })
+        .returning();
+
+      console.log('Created table:', table.id);
+
+      // Generate QR code with full URL
+      const tableUrl = `https://${domain}/table/${restaurantId}/${table.id}`;
+      console.log('Generating QR code for URL:', tableUrl);
+
+      const qrCodeSvg = await QRCode.toString(tableUrl, { 
+        type: 'svg',
+        width: 256,
+        margin: 4,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
         }
-      );
+      });
+
+      console.log('Generated QR code, length:', qrCodeSvg.length);
 
       // Update the table with the generated QR code
       const [updatedTable] = await db
@@ -144,9 +152,8 @@ export function registerRoutes(app: Express): Server {
 
       res.json(updatedTable);
     } catch (error) {
-      console.error('Error generating QR code:', error);
-      // Even if QR generation fails, return the table
-      res.json(table);
+      console.error('Error in table creation/QR generation:', error);
+      res.status(500).json({ message: "Failed to create table or generate QR code", error: String(error) });
     }
   });
 
