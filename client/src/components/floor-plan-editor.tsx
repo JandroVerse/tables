@@ -100,7 +100,7 @@ const DraggableTable = ({
       const dy = e.clientY - startY;
 
       // Simple resize logic - just add the mouse movement to the dimensions
-      let newWidth = direction.includes('right') 
+      let newWidth = direction.includes('right')
         ? Math.min(300, Math.max(80, startWidth + dx))
         : Math.min(300, Math.max(80, startWidth - dx));
 
@@ -141,6 +141,7 @@ const DraggableTable = ({
           height: size.height,
           touchAction: 'none',
         }}
+        data-table-id={table.id}
         onClick={(e) => {
           e.stopPropagation();
           onClick();
@@ -350,7 +351,29 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
           <Checkbox
             id="edit-mode"
             checked={editMode}
-            onCheckedChange={(checked) => setEditMode(checked as boolean)}
+            onCheckedChange={(checked) => {
+              setEditMode(checked as boolean);
+              // When turning off edit mode, save all table positions and dimensions
+              if (!checked && tables.length > 0) {
+                // Save each table's current position and dimensions
+                tables.forEach(table => {
+                  const tableElement = document.querySelector(`[data-table-id="${table.id}"]`);
+                  if (tableElement) {
+                    const rect = tableElement.getBoundingClientRect();
+                    updateTablePosition({
+                      id: table.id,
+                      position: {
+                        ...table.position,
+                        x: parseFloat(tableElement.style.transform.split('translate(')[1]),
+                        y: parseFloat(tableElement.style.transform.split(', ')[1]),
+                        width: rect.width,
+                        height: rect.height
+                      }
+                    });
+                  }
+                });
+              }
+            }}
           />
           <Label htmlFor="edit-mode" className="font-medium text-sm">
             Edit Mode
