@@ -104,6 +104,13 @@ export function registerRoutes(app: Express): Server {
     const { restaurantId } = req.params;
     const { name, position } = req.body;
 
+    console.log('Creating table with params:', {
+      restaurantId,
+      name,
+      position,
+      userId: req.user!.id
+    });
+
     // Verify restaurant ownership
     const [restaurant] = await db.query.restaurants.findMany({
       where: and(
@@ -113,8 +120,14 @@ export function registerRoutes(app: Express): Server {
     });
 
     if (!restaurant) {
+      console.log('Restaurant not found or unauthorized:', {
+        restaurantId,
+        userId: req.user!.id
+      });
       return res.status(404).json({ message: "Restaurant not found" });
     }
+
+    console.log('Restaurant verified:', restaurant);
 
     try {
       // Get the domain, with fallback and logging
@@ -131,7 +144,7 @@ export function registerRoutes(app: Express): Server {
         })
         .returning();
 
-      console.log('Created table:', table.id);
+      console.log('Created table:', table);
 
       // Generate QR code with full URL - updated to point to the table page
       const tableUrl = `https://${domain}/table/${restaurantId}/${table.id}`;
@@ -156,11 +169,7 @@ export function registerRoutes(app: Express): Server {
         .where(eq(tables.id, table.id))
         .returning();
 
-      if (!updatedTable.qrCode) {
-        throw new Error('QR code was not saved properly');
-      }
-
-      console.log('Successfully updated table with QR code:', updatedTable.id);
+      console.log('Successfully updated table with QR code:', updatedTable);
 
       res.json(updatedTable);
     } catch (error) {
@@ -173,7 +182,10 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/restaurants/:restaurantId/tables/:tableId", async (req, res) => {
     const { restaurantId, tableId } = req.params;
 
-    console.log(`Verifying table ${tableId} for restaurant ${restaurantId}`);
+    console.log('Verifying table access:', {
+      restaurantId,
+      tableId
+    });
 
     try {
       const [table] = await db.query.tables.findMany({
@@ -181,23 +193,26 @@ export function registerRoutes(app: Express): Server {
           eq(tables.id, Number(tableId)),
           eq(tables.restaurantId, Number(restaurantId))
         ),
+        with: {
+          restaurant: true
+        }
       });
-
-      console.log('Found table:', table);
 
       if (!table) {
-        console.log('Table not found');
-        return res.status(404).json({ message: "Table not found" });
+        console.log('Table not found or invalid restaurant:', {
+          tableId,
+          restaurantId
+        });
+        return res.status(404).json({ message: "Table not found or invalid restaurant" });
       }
 
+      console.log('Found table with restaurant:', table);
+
       // Return the table data with restaurant context
-      res.json({
-        ...table,
-        restaurantId: Number(restaurantId)
-      });
+      res.json(table);
     } catch (error) {
       console.error('Error verifying table:', error);
-      res.status(500).json({ message: "Failed to verify table" });
+      res.status(500).json({ message: "Failed to verify table", error: String(error) });
     }
   });
 
