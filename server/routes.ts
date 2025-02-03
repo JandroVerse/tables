@@ -142,7 +142,6 @@ export function registerRoutes(app: Express): Server {
     res.json(updatedTable);
   });
 
-  // Update and delete table routes - within restaurant context
   app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
     const { restaurantId, tableId } = req.params;
     const { position } = req.body;
@@ -236,22 +235,22 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Session management
-  app.post("/api/tables/:tableId/sessions", async (req, res) => {
-    const tableId = Number(req.params.tableId);
+  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req, res) => {
+    const { restaurantId, tableId } = req.params;
     const sessionId = nanoid();
 
     // Close any existing active sessions for this table
     await db.update(tableSessions)
       .set({ endedAt: new Date() })
       .where(and(
-        eq(tableSessions.tableId, tableId),
+        eq(tableSessions.tableId, Number(tableId)),
         eq(tableSessions.endedAt, null)
       ));
 
     // Create new session
     const [session] = await db.insert(tableSessions)
       .values({
-        tableId,
+        tableId: Number(tableId),
         sessionId,
         startedAt: new Date(),
       })
