@@ -341,7 +341,7 @@ export function registerRoutes(app: Express): Server {
   // Request routes
   app.get("/api/requests", async (req, res) => {
     const { tableId, restaurantId, sessionId } = req.query;
-    let query = {};
+    console.log(`Fetching requests for table ${tableId} in restaurant ${restaurantId}, session ${sessionId}`);
 
     try {
       // First verify the table belongs to the restaurant
@@ -353,6 +353,7 @@ export function registerRoutes(app: Express): Server {
       });
 
       if (!table) {
+        console.log(`Table ${tableId} not found in restaurant ${restaurantId}`);
         return res.status(404).json({ message: "Table not found in this restaurant" });
       }
 
@@ -367,6 +368,7 @@ export function registerRoutes(app: Express): Server {
         }
       });
 
+      console.log(`Found ${allRequests.length} requests for table ${tableId}`);
       res.json(allRequests);
     } catch (error) {
       console.error('Error fetching requests:', error);
@@ -376,6 +378,7 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/requests", async (req, res) => {
     const { tableId, restaurantId, sessionId, type, notes } = req.body;
+    console.log(`Creating request for table ${tableId} in restaurant ${restaurantId}`);
 
     try {
       // Verify the table belongs to the specified restaurant
@@ -387,18 +390,23 @@ export function registerRoutes(app: Express): Server {
       });
 
       if (!table) {
+        console.log(`Table ${tableId} not found in restaurant ${restaurantId}`);
         return res.status(404).json({ message: "Table not found in this restaurant" });
       }
+
+      console.log(`Verified table ${tableId} belongs to restaurant ${restaurantId}`);
 
       // Create the request
       const [request] = await db.insert(requests)
         .values({
-          tableId,
+          tableId: Number(tableId),
           sessionId,
           type,
           notes,
         })
         .returning();
+
+      console.log(`Created request ${request.id} for table ${tableId}`);
 
       // Broadcast to WebSocket clients
       wss.clients.forEach((client) => {
