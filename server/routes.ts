@@ -29,6 +29,19 @@ async function verifyTableAccess(restaurantId: number, tableId: number) {
   return table;
 }
 
+async function getActiveTableSession(tableId: number) {
+  const [activeSession] = await db
+    .select()
+    .from(tableSessions)
+    .where(and(
+      eq(tableSessions.tableId, tableId),
+      eq(tableSessions.endedAt, null)
+    ))
+    .limit(1);
+
+  return activeSession;
+}
+
 function ensureAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
   if (req.isAuthenticated()) {
     return next();
@@ -353,15 +366,26 @@ export function registerRoutes(app: Express): Server {
   // Session management
   app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req, res) => {
     const { restaurantId, tableId } = req.params;
-    const sessionId = nanoid();
 
     try {
-      console.log(`Creating session for table ${tableId} in restaurant ${restaurantId}`);
+      console.log(`Creating/retrieving session for table ${tableId} in restaurant ${restaurantId}`);
 
       // Verify the table belongs to the restaurant
       const table = await verifyTableAccess(Number(restaurantId), Number(tableId));
 
-      // Close any existing active sessions for this table
+      // Check for existing active session
+      const existingSession = await getActiveTableSession(Number(tableId));
+
+      if (existingSession) {
+        console.log(`Found existing session ${existingSession.id} for table ${tableId}`);
+        return res.json({
+          ...existingSession,
+          restaurant: table.restaurant,
+          tableName: table.name
+        });
+      }
+
+      // Close any existing active sessions for this table (just in case)
       await db.update(tableSessions)
         .set({ endedAt: new Date() })
         .where(and(
@@ -369,7 +393,8 @@ export function registerRoutes(app: Express): Server {
           eq(tableSessions.endedAt, null)
         ));
 
-      // Create new session
+      // Create new session with unique ID
+      const sessionId = nanoid();
       const [session] = await db.insert(tableSessions)
         .values({
           tableId: Number(tableId),
@@ -378,7 +403,7 @@ export function registerRoutes(app: Express): Server {
         })
         .returning();
 
-      console.log(`Created session ${session.id} for table ${tableId}`);
+      console.log(`Created new session ${session.id} for table ${tableId}`);
 
       res.json({
         ...session,
@@ -386,9 +411,9 @@ export function registerRoutes(app: Express): Server {
         tableName: table.name
       });
     } catch (error) {
-      console.error('Error creating session:', error);
+      console.error('Error managing session:', error);
       res.status(500).json({ 
-        message: "Failed to create session",
+        message: "Failed to manage session",
         error: error instanceof Error ? error.message : String(error)
       });
     }
