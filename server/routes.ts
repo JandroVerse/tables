@@ -190,8 +190,11 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Table not found" });
       }
 
-      // Return the table data
-      res.json(table);
+      // Return the table data with restaurant context
+      res.json({
+        ...table,
+        restaurantId: Number(restaurantId)
+      });
     } catch (error) {
       console.error('Error verifying table:', error);
       res.status(500).json({ message: "Failed to verify table" });
@@ -295,24 +298,44 @@ export function registerRoutes(app: Express): Server {
     const { restaurantId, tableId } = req.params;
     const sessionId = nanoid();
 
-    // Close any existing active sessions for this table
-    await db.update(tableSessions)
-      .set({ endedAt: new Date() })
-      .where(and(
-        eq(tableSessions.tableId, Number(tableId)),
-        eq(tableSessions.endedAt, null)
-      ));
+    try {
+      // Verify the table belongs to the restaurant first
+      const [table] = await db.query.tables.findMany({
+        where: and(
+          eq(tables.id, Number(tableId)),
+          eq(tables.restaurantId, Number(restaurantId))
+        ),
+      });
 
-    // Create new session
-    const [session] = await db.insert(tableSessions)
-      .values({
-        tableId: Number(tableId),
-        sessionId,
-        startedAt: new Date(),
-      })
-      .returning();
+      if (!table) {
+        return res.status(404).json({ message: "Table not found in this restaurant" });
+      }
 
-    res.json(session);
+      // Close any existing active sessions for this table
+      await db.update(tableSessions)
+        .set({ endedAt: new Date() })
+        .where(and(
+          eq(tableSessions.tableId, Number(tableId)),
+          eq(tableSessions.endedAt, null)
+        ));
+
+      // Create new session
+      const [session] = await db.insert(tableSessions)
+        .values({
+          tableId: Number(tableId),
+          sessionId,
+          startedAt: new Date(),
+        })
+        .returning();
+
+      res.json({
+        ...session,
+        restaurantId: Number(restaurantId)
+      });
+    } catch (error) {
+      console.error('Error creating session:', error);
+      res.status(500).json({ message: "Failed to create session" });
+    }
   });
 
   // Request routes
