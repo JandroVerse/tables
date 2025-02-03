@@ -352,22 +352,43 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.post("/api/requests", async (req, res) => {
-    const { tableId, sessionId, type, notes } = req.body;
+    const { tableId, restaurantId, sessionId, type, notes } = req.body;
 
-    const [request] = await db.insert(requests).values({
-      tableId,
-      sessionId,
-      type,
-      notes,
-    }).returning();
+    try {
+      // Verify the table belongs to the specified restaurant
+      const [table] = await db.query.tables.findMany({
+        where: and(
+          eq(tables.id, Number(tableId)),
+          eq(tables.restaurantId, Number(restaurantId))
+        ),
+      });
 
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "new_request", request }));
+      if (!table) {
+        return res.status(404).json({ message: "Table not found in this restaurant" });
       }
-    });
 
-    res.json(request);
+      // Create the request
+      const [request] = await db.insert(requests)
+        .values({
+          tableId,
+          sessionId,
+          type,
+          notes,
+        })
+        .returning();
+
+      // Broadcast to WebSocket clients
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: "new_request", request }));
+        }
+      });
+
+      res.json(request);
+    } catch (error) {
+      console.error('Error creating request:', error);
+      res.status(500).json({ message: "Failed to create request" });
+    }
   });
 
   app.patch("/api/requests/:id", async (req, res) => {
