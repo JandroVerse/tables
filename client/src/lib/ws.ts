@@ -80,7 +80,11 @@ class WebSocketService {
       console.log('WebSocket: Sending message', message);
       this.ws.send(JSON.stringify(message));
     } else {
-      console.error('WebSocket: Cannot send message - connection not open');
+      console.error('WebSocket: Cannot send message - connection not open', {
+        readyState: this.ws?.readyState,
+        isConnected: this.isConnected,
+        message
+      });
       if (!this.isConnected) {
         console.log('WebSocket: Attempting to reconnect before sending');
         this.connect();

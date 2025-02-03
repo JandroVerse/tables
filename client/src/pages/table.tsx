@@ -183,6 +183,30 @@ export default function TablePage() {
     enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData && !!restaurantId && !isNaN(restaurantId),
   });
 
+    const handleWaterRequest = () => {
+    console.log('Water request initiated:', {
+      waterCount,
+      tableId,
+      restaurantId,
+      sessionId
+    });
+
+    createRequest({
+      type: "water",
+      notes: `${waterCount} water${waterCount > 1 ? "s" : ""}`,
+    });
+  };
+
+  const handleWaiterRequest = () => {
+    console.log('Waiter request initiated:', {
+      tableId,
+      restaurantId,
+      sessionId
+    });
+
+    createRequest({ type: "waiter" });
+  };
+
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
       console.log('Creating request: Starting mutation', { type, notes });
@@ -235,12 +259,14 @@ export default function TablePage() {
       });
 
       // Send WebSocket notification with full request data
-      wsService.send({
+      const wsMessage = {
         type: "new_request",
         tableId,
         restaurantId,
         request: data
-      });
+      };
+      console.log('Creating request: Sending WebSocket notification', wsMessage);
+      wsService.send(wsMessage);
     },
     onError: (error: Error) => {
       console.error('Creating request: Mutation failed', error);
@@ -407,7 +433,7 @@ export default function TablePage() {
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={() => createRequest({ type: "waiter" })}
+                        onClick={handleWaiterRequest}
                       >
                         Yes, Call Waiter
                       </AlertDialogAction>
@@ -468,12 +494,7 @@ export default function TablePage() {
                   <DialogFooter>
                     <Button
                       onClick={() => {
-                        createRequest({
-                          type: "water",
-                          notes: `${waterCount} water${
-                            waterCount > 1 ? "s" : ""
-                          }`,
-                        });
+                        handleWaterRequest();
                         setIsWaterDialogOpen(false);
                         setWaterCount(1);
                       }}
