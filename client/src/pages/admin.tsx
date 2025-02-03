@@ -14,10 +14,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import type { Request, Table } from "@db/schema";
+import type { Request, Table, Restaurant } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
@@ -48,6 +48,10 @@ export default function AdminPage() {
     });
     return () => unsubscribe();
   }, []);
+
+  const { data: restaurants = [] } = useQuery<Restaurant[]>({
+    queryKey: ["/api/restaurants"],
+  });
 
   const { data: requests = [], refetch } = useQuery<Request[]>({
     queryKey: ["/api/requests"],
@@ -96,6 +100,9 @@ export default function AdminPage() {
     completed: "Completed",
   };
 
+  // Get the first restaurant for now (we can add restaurant switching later)
+  const currentRestaurant = restaurants[0];
+
   const getSortedRequests = (status: string) => {
     return requests
       .filter((r) => r.status === status)
@@ -130,7 +137,17 @@ export default function AdminPage() {
           </Link>
         </div>
 
-        <FloorPlanEditor />
+        {currentRestaurant ? (
+          <FloorPlanEditor restaurantId={currentRestaurant.id} />
+        ) : (
+          <Card>
+            <CardContent className="p-6">
+              <p className="text-center text-muted-foreground">
+                Please create a restaurant first to manage tables
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {statuses.map((status) => (
