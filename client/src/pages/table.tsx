@@ -84,26 +84,19 @@ export default function TablePage() {
   const [isValid, setIsValid] = useState(false);
   const [tableData, setTableData] = useState<any>(null);
 
-  // Verify the table exists and fetch table data
   useEffect(() => {
     if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
-      Promise.all([
-        fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`),
-        fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`)
-      ])
-        .then(async ([verifyRes, tableRes]) => {
-          const verifyData = await verifyRes.json();
-          const tableData = await tableRes.json();
+      fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`)
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Invalid table");
+          const tableData = await res.json();
+          setTableData(tableData);
+          setIsValid(true);
 
-          if (verifyData.valid) {
-            setIsValid(true);
-            setTableData(tableData);
-            if (!sessionId) {
-              return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
-            }
-            return new Response(JSON.stringify({ sessionId }));
+          if (!sessionId) {
+            return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
           }
-          throw new Error("Invalid table");
+          return new Response(JSON.stringify({ sessionId }));
         })
         .then((res) => res.json())
         .then((session) => {
