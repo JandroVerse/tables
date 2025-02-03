@@ -145,6 +145,9 @@ export default function TablePage() {
         }));
         localStorage.setItem('sessionId', sessionData.sessionId);
 
+        // Initialize WebSocket with the session ID
+        wsService.connect(sessionData.sessionId);
+
         queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       } catch (error) {
         console.error("Failed to initialize session:", error);
@@ -192,64 +195,41 @@ export default function TablePage() {
   }, [sessionExpiryTime, tableId]);
 
 
-  useEffect(() => {
-    if (!sessionId) {
-      console.log('Table page: Waiting for session ID before connecting WebSocket');
-      return;
-    }
-
-    console.log('Table page: Connecting to WebSocket service with session:', sessionId);
-    wsService.connect();
-
-    const unsubscribe = wsService.subscribe((data) => {
-      console.log('Table page: Received WebSocket event', data);
-
-      switch (data.type) {
-        case 'new_request':
-        case 'update_request':
-          console.log('Table page: Invalidating requests query due to WebSocket event', data);
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
-          break;
-        case 'connection_status':
-          console.log('Table page: WebSocket connection status:', data.status);
-          if (data.status === 'connected') {
-            // Refresh data when reconnected
-            queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
-          }
-          break;
-        default:
-          console.log('Table page: Unknown WebSocket event type:', data.type);
-      }
-    });
-
-    return () => {
-      console.log('Table page: Unsubscribing from WebSocket service');
-      wsService.disconnect(); // Properly disconnect before unmounting
-      unsubscribe();
-    };
-  }, [sessionId, tableId, restaurantId, queryClient]); // Add sessionId to dependencies
-
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", tableId, restaurantId],
     queryFn: async () => {
-      if (!sessionId || !tableId || !restaurantId) return [];
-      console.log('Fetching requests with:', { tableId, restaurantId, sessionId });
-      const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`, {
-        headers: {
-          'X-Session-ID': sessionId
-        }
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('Failed to fetch requests:', errorText);
-        throw new Error(errorText || "Failed to fetch requests");
+      if (!sessionId || !tableId || !restaurantId) {
+        console.log('Skipping request fetch - missing required parameters:', { tableId, restaurantId, sessionId });
+        return [];
       }
-      const data = await res.json();
-      console.log('Fetched requests:', data);
-      return data.map((request: any) => ({
-        ...request,
-        tableName: tableData?.name
-      }));
+
+      console.log('Fetching requests with:', { tableId, restaurantId, sessionId });
+
+      try {
+        const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`, {
+          headers: {
+            'X-Session-ID': sessionId
+          }
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('Failed to fetch requests:', errorText);
+          throw new Error(errorText || "Failed to fetch requests");
+        }
+
+        const data = await res.json();
+        console.log('Fetched requests:', data);
+
+        // Add table name to each request
+        return data.map((request: any) => ({
+          ...request,
+          tableName: tableData?.name
+        }));
+      } catch (error) {
+        console.error('Error fetching requests:', error);
+        throw error;
+      }
     },
     enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData && !!restaurantId && !isNaN(restaurantId),
   });

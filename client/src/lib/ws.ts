@@ -18,8 +18,17 @@ class WebSocketService {
   private reconnectDelay = 2000;
   private isConnected = false;
   private connectionTimer: NodeJS.Timeout | null = null;
+  private sessionId: string | null = null;
 
-  connect() {
+  connect(forceSessionId?: string) {
+    // If a session ID is provided, use it immediately
+    if (forceSessionId) {
+      this.sessionId = forceSessionId;
+      console.log('WebSocket: Using provided session ID:', forceSessionId);
+    } else {
+      this.sessionId = localStorage.getItem('sessionId');
+    }
+
     // Cancel any existing connection attempt
     if (this.connectionTimer) {
       clearTimeout(this.connectionTimer);
@@ -32,8 +41,7 @@ class WebSocketService {
       return;
     }
 
-    const sessionId = localStorage.getItem('sessionId');
-    if (!sessionId) {
+    if (!this.sessionId) {
       console.log('WebSocket: No session ID available, retrying in 2 seconds');
       this.connectionTimer = setTimeout(() => this.connect(), 2000);
       return;
@@ -42,9 +50,9 @@ class WebSocketService {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const wsUrl = new URL(`${protocol}//${host}/ws`);
-    wsUrl.searchParams.append('sessionId', sessionId);
+    wsUrl.searchParams.append('sessionId', this.sessionId);
 
-    console.log('WebSocket: Attempting to connect with session ID:', sessionId);
+    console.log('WebSocket: Attempting to connect with session ID:', this.sessionId);
 
     try {
       this.ws = new WebSocket(wsUrl.toString());
@@ -96,6 +104,13 @@ class WebSocketService {
       status: 'disconnected'
     });
 
+    // Try to get a fresh session ID
+    const freshSessionId = localStorage.getItem('sessionId');
+    if (freshSessionId !== this.sessionId) {
+      this.sessionId = freshSessionId;
+      console.log('WebSocket: Found new session ID during reconnect:', freshSessionId);
+    }
+
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       const delay = this.reconnectDelay * Math.min(Math.pow(2, this.reconnectAttempts), 10);
       console.log(`WebSocket: Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}) in ${delay}ms`);
@@ -118,23 +133,29 @@ class WebSocketService {
       return;
     }
 
-    const sessionId = localStorage.getItem('sessionId');
-    if (!sessionId) {
-      console.error('WebSocket: No session ID available for sending message');
-      return;
+    if (!this.sessionId) {
+      // Try to get a fresh session ID before sending
+      const freshSessionId = localStorage.getItem('sessionId');
+      if (freshSessionId) {
+        this.sessionId = freshSessionId;
+        console.log('WebSocket: Retrieved fresh session ID before sending:', freshSessionId);
+      } else {
+        console.error('WebSocket: No session ID available for sending message');
+        return;
+      }
     }
 
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('WebSocket: Sending message with session ID:', sessionId);
+      console.log('WebSocket: Sending message with session ID:', this.sessionId);
       const messageWithSession = {
         ...message,
-        sessionId
+        sessionId: this.sessionId
       };
       this.ws.send(JSON.stringify(messageWithSession));
     } else {
       console.error('WebSocket: Cannot send message - connection not open');
       if (!this.isConnected) {
-        this.connect(); // Try to reconnect if not connected
+        this.connect(this.sessionId); // Try to reconnect with current session ID
       }
     }
   }
@@ -165,7 +186,14 @@ class WebSocketService {
     }
     this.isConnected = false;
     this.reconnectAttempts = 0;
+    this.sessionId = null;
     console.log('WebSocket: Disconnected and cleaned up');
+  }
+
+  // Method to update session ID without reconnecting
+  updateSessionId(newSessionId: string) {
+    this.sessionId = newSessionId;
+    console.log('WebSocket: Updated session ID:', newSessionId);
   }
 }
 
