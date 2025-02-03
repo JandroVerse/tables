@@ -54,6 +54,7 @@ export default function TablePage() {
   const [isValidating, setIsValidating] = useState(true);
   const [isValid, setIsValid] = useState(false);
   const [tableData, setTableData] = useState<Table | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Initialize auth and validate table
   useEffect(() => {
@@ -62,6 +63,8 @@ export default function TablePage() {
         // Clear any existing auth tokens
         localStorage.removeItem('tableToken');
         localStorage.removeItem('sessionId');
+
+        console.log('Validating table with params:', { token, restaurantId, tableId });
 
         if (!token && (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId))) {
           throw new Error("Invalid table parameters");
@@ -74,13 +77,16 @@ export default function TablePage() {
 
           const res = await fetch(`/api/tables/${token}`);
           if (!res.ok) {
-            throw new Error(await res.text() || "Invalid table token");
+            const errorText = await res.text();
+            console.error('Token validation failed:', errorText);
+            throw new Error(errorText || "Invalid table token");
           }
 
           const data = await res.json();
           console.log('Table data received:', data);
           setTableData(data);
           setIsValid(true);
+          setError(null);
         } else {
           // Session-based auth
           console.log('Using session-based auth:', { restaurantId, tableId });
@@ -90,7 +96,9 @@ export default function TablePage() {
           );
 
           if (!res.ok) {
-            throw new Error(await res.text() || "Failed to create session");
+            const errorText = await res.text();
+            console.error('Session creation failed:', errorText);
+            throw new Error(errorText || "Failed to create session");
           }
 
           const session = await res.json();
@@ -104,15 +112,17 @@ export default function TablePage() {
 
           setTableData(session);
           setIsValid(true);
+          setError(null);
         }
       } catch (error) {
         console.error('Table validation failed:', error);
+        setError(error instanceof Error ? error.message : "Failed to validate table");
+        setIsValid(false);
         toast({
           title: "Error",
           description: error instanceof Error ? error.message : "Failed to validate table",
           variant: "destructive",
         });
-        setIsValid(false);
       } finally {
         setIsValidating(false);
       }
@@ -123,7 +133,10 @@ export default function TablePage() {
 
   // Setup WebSocket connection
   useEffect(() => {
-    if (!tableData) return;
+    if (!tableData) {
+      console.log('No table data yet, skipping WebSocket connection');
+      return;
+    }
 
     console.log('Initializing WebSocket connection...');
     wsService.connect();
@@ -131,8 +144,20 @@ export default function TablePage() {
     const unsubscribe = wsService.subscribe((data) => {
       console.log('WebSocket event received:', data);
 
+      if (data.type === 'connection_status') {
+        console.log('WebSocket connection status:', data.status);
+        if (data.status === 'connected') {
+          console.log('WebSocket connected, refreshing requests');
+          queryClient.invalidateQueries({ 
+            queryKey: ["/api/requests", token || `${restaurantId}/${tableId}`] 
+          });
+        }
+      }
+
       if (data.type === 'new_request' || data.type === 'update_request') {
+        console.log('Request event received:', data);
         if (data.request?.tableId === tableData.id) {
+          console.log('Refreshing requests for table:', tableData.id);
           queryClient.invalidateQueries({ 
             queryKey: ["/api/requests", token || `${restaurantId}/${tableId}`] 
           });
@@ -150,8 +175,12 @@ export default function TablePage() {
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", token || `${restaurantId}/${tableId}`],
     queryFn: async () => {
-      if (!tableData) return [];
+      if (!tableData) {
+        console.log('No table data, skipping request fetch');
+        return [];
+      }
 
+      console.log('Fetching requests for table:', tableData.id);
       const params = new URLSearchParams();
       if (token) {
         params.append('token', token);
@@ -161,9 +190,20 @@ export default function TablePage() {
         params.append('sessionId', localStorage.getItem('sessionId') || '');
       }
 
-      const res = await fetch(`/api/requests?${params}`);
-      if (!res.ok) throw new Error("Failed to fetch requests");
-      return res.json();
+      try {
+        const res = await fetch(`/api/requests?${params}`);
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('Failed to fetch requests:', errorText);
+          throw new Error(errorText);
+        }
+        const data = await res.json();
+        console.log('Requests fetched:', data);
+        return data;
+      } catch (error) {
+        console.error('Error fetching requests:', error);
+        throw error;
+      }
     },
     enabled: !!tableData && (!!token || (!!restaurantId && !!tableId)),
   });
@@ -268,15 +308,15 @@ export default function TablePage() {
     );
   }
 
-  if (!isValid || !tableData) {
+  if (error || !isValid || !tableData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card>
           <CardHeader>
-            <CardTitle>Invalid Table</CardTitle>
+            <CardTitle>Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>This table appears to be invalid or no longer exists. Please scan a valid QR code.</p>
+            <p>{error || "This table appears to be invalid or no longer exists. Please scan a valid QR code."}</p>
           </CardContent>
         </Card>
       </div>
