@@ -84,6 +84,7 @@ const DraggableTable = ({
     y: table.position.y || 0,
   });
   const [resizing, setResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
 
   useEffect(() => {
     setSize({
@@ -96,45 +97,74 @@ const DraggableTable = ({
     });
   }, [table.position]);
 
-  const handleResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
+  const handleResizeStart = (e: React.MouseEvent, handle: string) => {
     if (!editMode) return;
     e.stopPropagation();
     e.preventDefault();
 
-    const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const startY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const startX = e.clientX;
+    const startY = e.clientY;
     const startWidth = size.width;
     const startHeight = size.height;
+    const startPosition = { ...position };
 
-    const handleMove = (e: MouseEvent | TouchEvent) => {
+    setResizing(true);
+    setResizeHandle(handle);
+
+    const handleMove = (e: MouseEvent) => {
       if (!resizing) return;
 
-      const currentX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
-      const currentY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
 
-      const deltaX = currentX - startX;
-      const deltaY = currentY - startY;
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+      let newX = startPosition.x;
+      let newY = startPosition.y;
 
-      const newWidth = Math.max(80, Math.min(300, startWidth + deltaX));
-      const newHeight = Math.max(80, Math.min(300, startHeight + deltaY));
+      // Handle resizing based on which corner is being dragged
+      switch (handle) {
+        case 'top-left':
+          newWidth = Math.max(80, startWidth - deltaX);
+          newHeight = Math.max(80, startHeight - deltaY);
+          newX = startPosition.x + (startWidth - newWidth);
+          newY = startPosition.y + (startHeight - newHeight);
+          break;
+        case 'top-right':
+          newWidth = Math.max(80, startWidth + deltaX);
+          newHeight = Math.max(80, startHeight - deltaY);
+          newY = startPosition.y + (startHeight - newHeight);
+          break;
+        case 'bottom-left':
+          newWidth = Math.max(80, startWidth - deltaX);
+          newHeight = Math.max(80, startHeight + deltaY);
+          newX = startPosition.x + (startWidth - newWidth);
+          break;
+        case 'bottom-right':
+          newWidth = Math.max(80, startWidth + deltaX);
+          newHeight = Math.max(80, startHeight + deltaY);
+          break;
+      }
+
+      // Enforce maximum size
+      newWidth = Math.min(300, newWidth);
+      newHeight = Math.min(300, newHeight);
 
       setSize({ width: newWidth, height: newHeight });
+      setPosition({ x: newX, y: newY });
     };
 
     const handleEnd = () => {
       setResizing(false);
+      setResizeHandle(null);
       onResize(table.id, size);
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleEnd);
-      window.removeEventListener('touchmove', handleMove);
-      window.removeEventListener('touchend', handleEnd);
+      onDragStop(table.id, position);
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
     };
 
-    setResizing(true);
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleEnd);
-    window.addEventListener('touchmove', handleMove);
-    window.addEventListener('touchend', handleEnd);
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleEnd);
   };
 
   return (
@@ -169,14 +199,38 @@ const DraggableTable = ({
           <span className="font-medium text-gray-800">{table.name}</span>
         </div>
 
-        {/* Resize handle */}
+        {/* Resize handles */}
         {editMode && (
-          <div
-            className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize bg-primary/20 hover:bg-primary/30 rounded-bl transition-colors"
-            onMouseDown={handleResizeStart}
-            onTouchStart={handleResizeStart}
-            style={{ touchAction: 'none' }}
-          />
+          <>
+            {/* Top-left resize handle */}
+            <div
+              className={`absolute -top-1 -left-1 w-3 h-3 cursor-nw-resize rounded-full bg-primary ${
+                resizeHandle === 'top-left' ? 'opacity-100' : 'opacity-50'
+              }`}
+              onMouseDown={(e) => handleResizeStart(e, 'top-left')}
+            />
+            {/* Top-right resize handle */}
+            <div
+              className={`absolute -top-1 -right-1 w-3 h-3 cursor-ne-resize rounded-full bg-primary ${
+                resizeHandle === 'top-right' ? 'opacity-100' : 'opacity-50'
+              }`}
+              onMouseDown={(e) => handleResizeStart(e, 'top-right')}
+            />
+            {/* Bottom-left resize handle */}
+            <div
+              className={`absolute -bottom-1 -left-1 w-3 h-3 cursor-sw-resize rounded-full bg-primary ${
+                resizeHandle === 'bottom-left' ? 'opacity-100' : 'opacity-50'
+              }`}
+              onMouseDown={(e) => handleResizeStart(e, 'bottom-left')}
+            />
+            {/* Bottom-right resize handle */}
+            <div
+              className={`absolute -bottom-1 -right-1 w-3 h-3 cursor-se-resize rounded-full bg-primary ${
+                resizeHandle === 'bottom-right' ? 'opacity-100' : 'opacity-50'
+              }`}
+              onMouseDown={(e) => handleResizeStart(e, 'bottom-right')}
+            />
+          </>
         )}
 
         {/* Delete button */}
