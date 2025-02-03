@@ -14,37 +14,37 @@ class WebSocketService {
   private ws: WebSocket | null = null;
   private listeners: ServiceRequestListener[] = [];
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 10; // Increased from 5 to 10
-  private reconnectDelay = 2000; // Increased from 1000 to 2000
+  private maxReconnectAttempts = 10;
+  private reconnectDelay = 2000;
   private isConnected = false;
   private connectionTimer: NodeJS.Timeout | null = null;
 
   connect() {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('WebSocket: Already connected');
-      return;
-    }
-
-    // Clear any existing connection timer
+    // Cancel any existing connection attempt
     if (this.connectionTimer) {
       clearTimeout(this.connectionTimer);
       this.connectionTimer = null;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const sessionId = localStorage.getItem('sessionId');
+    // Check if already connected
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('WebSocket: Already connected');
+      return;
+    }
 
+    const sessionId = localStorage.getItem('sessionId');
     if (!sessionId) {
       console.log('WebSocket: No session ID available, retrying in 2 seconds');
       this.connectionTimer = setTimeout(() => this.connect(), 2000);
       return;
     }
 
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
     const wsUrl = new URL(`${protocol}//${host}/ws`);
     wsUrl.searchParams.append('sessionId', sessionId);
 
-    console.log('WebSocket: Attempting to connect to', wsUrl.toString());
+    console.log('WebSocket: Attempting to connect with session ID:', sessionId);
 
     try {
       this.ws = new WebSocket(wsUrl.toString());
@@ -70,28 +70,11 @@ class WebSocketService {
       };
 
       this.ws.onclose = () => {
-        console.log('WebSocket: Connection closed');
-        this.isConnected = false;
-        this.ws = null;
-
-        this.notifyListeners({
-          type: 'connection_status',
-          status: 'disconnected'
-        });
-
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-          const delay = this.reconnectDelay * Math.min(Math.pow(2, this.reconnectAttempts), 10);
-          console.log(`WebSocket: Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}) in ${delay}ms`);
-
-          this.notifyListeners({
-            type: 'connection_status',
-            status: 'reconnecting'
-          });
-
-          this.reconnectAttempts++;
-          this.connectionTimer = setTimeout(() => this.connect(), delay);
-        } else {
-          console.error('WebSocket: Max reconnection attempts reached');
+        if (this.isConnected) {
+          console.log('WebSocket: Connection closed, attempting to reconnect');
+          this.isConnected = false;
+          this.ws = null;
+          this.handleReconnect();
         }
       };
 
@@ -108,11 +91,24 @@ class WebSocketService {
   }
 
   private handleReconnect() {
+    this.notifyListeners({
+      type: 'connection_status',
+      status: 'disconnected'
+    });
+
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       const delay = this.reconnectDelay * Math.min(Math.pow(2, this.reconnectAttempts), 10);
-      console.log(`WebSocket: Scheduling reconnection attempt (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}) in ${delay}ms`);
+      console.log(`WebSocket: Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}) in ${delay}ms`);
+
+      this.notifyListeners({
+        type: 'connection_status',
+        status: 'reconnecting'
+      });
+
       this.reconnectAttempts++;
       this.connectionTimer = setTimeout(() => this.connect(), delay);
+    } else {
+      console.error('WebSocket: Max reconnection attempts reached');
     }
   }
 
@@ -124,37 +120,33 @@ class WebSocketService {
 
     const sessionId = localStorage.getItem('sessionId');
     if (!sessionId) {
-      console.error('WebSocket: No session ID available');
+      console.error('WebSocket: No session ID available for sending message');
       return;
     }
 
     if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('WebSocket: Sending message with session ID:', sessionId);
       const messageWithSession = {
         ...message,
         sessionId
       };
-      console.log('WebSocket: Sending message', messageWithSession);
       this.ws.send(JSON.stringify(messageWithSession));
     } else {
-      console.error('WebSocket: Cannot send message - connection not open', {
-        readyState: this.ws?.readyState,
-        isConnected: this.isConnected,
-        message
-      });
+      console.error('WebSocket: Cannot send message - connection not open');
       if (!this.isConnected) {
-        this.connect();
+        this.connect(); // Try to reconnect if not connected
       }
     }
   }
 
   subscribe(listener: ServiceRequestListener) {
     if (!this.listeners.includes(listener)) {
-      console.log('WebSocket: New listener subscribed');
       this.listeners.push(listener);
+      console.log('WebSocket: New listener subscribed');
     }
     return () => {
-      console.log('WebSocket: Listener unsubscribed');
       this.listeners = this.listeners.filter(l => l !== listener);
+      console.log('WebSocket: Listener unsubscribed');
     };
   }
 
@@ -173,6 +165,7 @@ class WebSocketService {
     }
     this.isConnected = false;
     this.reconnectAttempts = 0;
+    console.log('WebSocket: Disconnected and cleaned up');
   }
 }
 

@@ -193,8 +193,13 @@ export default function TablePage() {
 
 
   useEffect(() => {
+    if (!sessionId) {
+      console.log('Table page: Waiting for session ID before connecting WebSocket');
+      return;
+    }
+
+    console.log('Table page: Connecting to WebSocket service with session:', sessionId);
     wsService.connect();
-    console.log('Table page: Connecting to WebSocket service');
 
     const unsubscribe = wsService.subscribe((data) => {
       console.log('Table page: Received WebSocket event', data);
@@ -219,9 +224,10 @@ export default function TablePage() {
 
     return () => {
       console.log('Table page: Unsubscribing from WebSocket service');
+      wsService.disconnect(); // Properly disconnect before unmounting
       unsubscribe();
     };
-  }, [tableId, queryClient, restaurantId]);
+  }, [sessionId, tableId, restaurantId, queryClient]); // Add sessionId to dependencies
 
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", tableId, restaurantId],
