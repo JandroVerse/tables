@@ -253,9 +253,9 @@ const DraggableTable = ({
           </>
         )}
 
-        {/* Rest of the components remain unchanged */}
+        {/* Delete button - moved to bottom */}
         {editMode && (
-          <div className="absolute -top-8 left-1/2 -translate-x-1/2">
+          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 z-10">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="icon" className="h-6 w-6">
