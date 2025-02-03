@@ -3,7 +3,7 @@ import { z } from "zod";
 type ServiceRequestListener = (data: any) => void;
 
 interface WebSocketMessage {
-  type: 'new_request' | 'update_request' | 'connection_status';
+  type: 'new_request' | 'update_request' | 'connection_status' | 'ping';
   tableId?: number;
   restaurantId?: number;
   request?: any;

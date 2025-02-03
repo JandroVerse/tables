@@ -95,6 +95,17 @@ export function registerRoutes(app: Express): Server {
       sessionId
     });
 
+    // Send initial connection confirmation
+    try {
+      ws.send(JSON.stringify({
+        type: 'connection_status',
+        status: 'connected',
+        sessionId
+      }));
+    } catch (error) {
+      console.error('Error sending connection confirmation:', error);
+    }
+
     ws.on("message", async (message: string) => {
       try {
         const data = JSON.parse(message.toString());
@@ -102,6 +113,20 @@ export function registerRoutes(app: Express): Server {
 
         if (data.sessionId !== sessionId) {
           console.error('WebSocket: Session ID mismatch');
+          return;
+        }
+
+        // Handle ping messages
+        if (data.type === 'ping') {
+          try {
+            ws.send(JSON.stringify({
+              type: 'connection_status',
+              status: 'connected',
+              sessionId
+            }));
+          } catch (error) {
+            console.error('Error sending ping response:', error);
+          }
           return;
         }
 

@@ -175,17 +175,31 @@ export default function TablePage() {
     wsService.disconnect();
     wsService.connect(sessionId, 'customer');
 
+    // Subscribe to WebSocket events
     const unsubscribe = wsService.subscribe((data) => {
       console.log('Received WebSocket event:', data);
 
       if (data.type === 'new_request' || data.type === 'update_request') {
         console.log('Invalidating requests query due to:', data.type);
         queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+      } else if (data.type === 'connection_status') {
+        console.log('WebSocket connection status:', data.status);
+        if (data.status === 'connected') {
+          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+        }
       }
     });
 
+    // Ping every 30 seconds to keep connection alive
+    const pingInterval = setInterval(() => {
+      if (wsService) {
+        wsService.send({ type: 'ping', tableId, restaurantId });
+      }
+    }, 30000);
+
     return () => {
       console.log('Cleaning up WebSocket connection');
+      clearInterval(pingInterval);
       unsubscribe();
       wsService.disconnect();
     };
@@ -355,7 +369,10 @@ export default function TablePage() {
 
   const { mutate: cancelRequest } = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
+      return apiRequest("PATCH", `/api/requests/${id}`, { 
+        status: "cleared",
+        sessionId  // Include sessionId in the request
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
@@ -429,6 +446,7 @@ export default function TablePage() {
 
     return () => clearInterval(interval);
   }, [sessionExpiryTime, tableId]);
+
 
 
   return (
