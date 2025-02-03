@@ -5,7 +5,7 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { users, type User } from "@db/schema";
+import { users as usersTable, type User } from "@db/schema";
 import { db, pool } from "@db";
 import { eq } from "drizzle-orm";
 
@@ -32,9 +32,9 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 async function getUserByUsername(username: string) {
-  const users = await db.select().from(users).where(eq(users.username, username)).limit(1);
-  console.log('Found user:', users[0]); // Add logging
-  return users;
+  const foundUsers = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
+  console.log('Found user:', foundUsers[0]); // Add logging
+  return foundUsers;
 }
 
 export function setupAuth(app: Express) {
@@ -100,8 +100,8 @@ export function setupAuth(app: Express) {
       console.log('Deserializing user:', id); // Add logging
       const [user] = await db
         .select()
-        .from(users)
-        .where(eq(users.id, id))
+        .from(usersTable)
+        .where(eq(usersTable.id, id))
         .limit(1);
 
       if (!user) {
@@ -124,7 +124,7 @@ export function setupAuth(app: Express) {
       }
 
       const [user] = await db
-        .insert(users)
+        .insert(usersTable)
         .values({
           ...req.body,
           password: await hashPassword(req.body.password),
