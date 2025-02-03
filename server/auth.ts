@@ -8,7 +8,6 @@ import { promisify } from "util";
 import { users, type User } from "@db/schema";
 import { db, pool } from "@db";
 import { eq } from "drizzle-orm";
-import { fromZodError } from "zod-validation-error";
 
 declare global {
   namespace Express {
@@ -33,7 +32,9 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 async function getUserByUsername(username: string) {
-  return db.select().from(users).where(eq(users.username, username)).limit(1);
+  const users = await db.select().from(users).where(eq(users.username, username)).limit(1);
+  console.log('Found user:', users[0]); // Add logging
+  return users;
 }
 
 export function setupAuth(app: Express) {
@@ -65,21 +66,38 @@ export function setupAuth(app: Express) {
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
+        console.log('Login attempt for username:', username); // Add logging
         const [user] = await getUserByUsername(username);
-        if (!user || !(await comparePasswords(password, user.password))) {
+        if (!user) {
+          console.log('User not found:', username); // Add logging
           return done(null, false);
-        } else {
-          return done(null, user);
         }
+
+        const passwordMatch = await comparePasswords(password, user.password);
+        console.log('Password match result:', passwordMatch); // Add logging
+
+        if (!passwordMatch) {
+          console.log('Password mismatch for user:', username); // Add logging
+          return done(null, false);
+        }
+
+        console.log('Login successful for user:', username); // Add logging
+        return done(null, user);
       } catch (error) {
+        console.error('Login error:', error); // Add logging
         return done(error);
       }
     }),
   );
 
-  passport.serializeUser((user: any, done) => done(null, user.id));
+  passport.serializeUser((user: any, done) => {
+    console.log('Serializing user:', user.id); // Add logging
+    done(null, user.id)
+  });
+
   passport.deserializeUser(async (id: number, done) => {
     try {
+      console.log('Deserializing user:', id); // Add logging
       const [user] = await db
         .select()
         .from(users)
@@ -87,10 +105,13 @@ export function setupAuth(app: Express) {
         .limit(1);
 
       if (!user) {
+        console.log('User not found during deserialization:', id); // Add logging
         return done(null, false);
       }
+      console.log('User deserialized successfully:', id); // Add logging
       done(null, user);
     } catch (error) {
+      console.error('Deserialization error:', error); // Add logging
       done(error);
     }
   });
@@ -120,6 +141,7 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", passport.authenticate("local"), (req, res) => {
+    console.log('Login successful, user:', req.user); // Add logging
     res.status(200).json(req.user);
   });
 
