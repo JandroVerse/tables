@@ -73,7 +73,7 @@ export default function TablePage() {
   const [sessionExpiryTime, setSessionExpiryTime] = useState<Date | null>(null);
   const [remainingTime, setRemainingTime] = useState<string>("");
 
-  // Initialize session and validate table
+  // Initialize session and validate table and WebSocket connection
   useEffect(() => {
     if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
       console.error('Invalid table or restaurant ID:', { restaurantId, tableId });
@@ -138,15 +138,17 @@ export default function TablePage() {
         const sessionData = await sessionResponse.json();
         console.log('Session data:', sessionData);
 
-        setSessionId(sessionData.sessionId);
+        // Set session data and initialize WebSocket
+        const newSessionId = sessionData.sessionId;
+        setSessionId(newSessionId);
         localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
-          id: sessionData.sessionId,
+          id: newSessionId,
           expiry: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString()
         }));
-        localStorage.setItem('sessionId', sessionData.sessionId);
+        localStorage.setItem('sessionId', newSessionId);
 
-        // Initialize WebSocket with the session ID
-        wsService.connect(sessionData.sessionId);
+        wsService.disconnect(); // Clean up any existing connection
+        wsService.connect(newSessionId); // Connect with new session ID
 
         queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       } catch (error) {
@@ -429,6 +431,42 @@ export default function TablePage() {
     }
     createRequest({ type: "other", notes: otherRequestNote });
   };
+
+  useEffect(() => {
+    if (!sessionId || !tableId || !restaurantId) {
+      console.log('Table page: WebSocket effect - Missing required data:', { sessionId, tableId, restaurantId });
+      return;
+    }
+
+    console.log('Table page: Setting up WebSocket event subscription with:', { sessionId, tableId, restaurantId });
+
+    // Subscribe to WebSocket events
+    const unsubscribe = wsService.subscribe((data) => {
+      console.log('Table page: Received WebSocket event:', data);
+
+      switch (data.type) {
+        case 'new_request':
+        case 'update_request':
+          console.log('Table page: Invalidating requests query due to WebSocket event:', data);
+          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+          break;
+        case 'connection_status':
+          console.log('Table page: WebSocket connection status update:', data.status);
+          if (data.status === 'connected') {
+            queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+          }
+          break;
+        default:
+          console.log('Table page: Unknown WebSocket event type:', data.type);
+      }
+    });
+
+    // Cleanup function
+    return () => {
+      console.log('Table page: Cleaning up WebSocket event subscription');
+      unsubscribe();
+    };
+  }, [sessionId, tableId, restaurantId, queryClient]);
 
   return (
     <div className="min-h-screen">

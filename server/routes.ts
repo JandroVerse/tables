@@ -8,6 +8,9 @@ import QRCode from "qrcode";
 import { nanoid } from "nanoid";
 import { setupAuth } from "./auth";
 
+// Keep track of WebSocket clients by session
+const clientsBySession = new Map<string, Set<WebSocket>>();
+
 async function verifyTableAccess(restaurantId: number, tableId: number) {
   const [table] = await db.query.tables.findMany({
     where: and(
@@ -41,6 +44,18 @@ export function registerRoutes(app: Express): Server {
       if (req.headers['sec-websocket-protocol'] === 'vite-hmr') {
         return false;
       }
+
+      // Get session ID from query parameters
+      const url = new URL(req.url!, `http://${req.headers.host}`);
+      const sessionId = url.searchParams.get('sessionId');
+
+      if (!sessionId) {
+        console.log('WebSocket: Connection rejected - No session ID provided');
+        return false;
+      }
+
+      // Store session ID in request for use in connection handler
+      (req as any).sessionId = sessionId;
       return true;
     }
   });
@@ -55,19 +70,50 @@ export function registerRoutes(app: Express): Server {
   setupAuth(app);
 
   // WebSocket setup section
-  wss.on("connection", (ws: WebSocket) => {
-    console.log("New WebSocket connection");
-    ws.on("message", (message: string) => {
+  wss.on("connection", (ws: WebSocket, req: any) => {
+    const sessionId = req.sessionId;
+    console.log("WebSocket: New connection with session ID:", sessionId);
+
+    // Add client to session group
+    if (!clientsBySession.has(sessionId)) {
+      clientsBySession.set(sessionId, new Set());
+    }
+    clientsBySession.get(sessionId)!.add(ws);
+
+    ws.on("message", async (message: string) => {
       try {
         const data = JSON.parse(message.toString());
-        // Only broadcast to clients in the same restaurant context
-        wss.clients.forEach((client) => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(message);
-          }
-        });
+        console.log('WebSocket: Received message:', data);
+
+        // Validate session ID in message matches connection
+        if (data.sessionId !== sessionId) {
+          console.error('WebSocket: Session ID mismatch');
+          return;
+        }
+
+        // Only broadcast to clients in the same session
+        const sessionClients = clientsBySession.get(sessionId);
+        if (sessionClients) {
+          console.log(`WebSocket: Broadcasting to ${sessionClients.size} clients in session ${sessionId}`);
+          sessionClients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+              client.send(message);
+            }
+          });
+        }
       } catch (error) {
-        console.error("Failed to parse WebSocket message:", error);
+        console.error("WebSocket: Failed to process message:", error);
+      }
+    });
+
+    ws.on("close", () => {
+      console.log("WebSocket: Client disconnected from session:", sessionId);
+      const clients = clientsBySession.get(sessionId);
+      if (clients) {
+        clients.delete(ws);
+        if (clients.size === 0) {
+          clientsBySession.delete(sessionId);
+        }
       }
     });
   });
