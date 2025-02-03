@@ -165,6 +165,7 @@ export default function TablePage() {
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
       if (!sessionId) throw new Error("No active session");
+      console.log('Creating request with:', { tableId, restaurantId, type, notes, sessionId });
       const response = await apiRequest("POST", "/api/requests", {
         tableId,
         restaurantId,
@@ -172,6 +173,10 @@ export default function TablePage() {
         notes,
         sessionId,
       });
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error);
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -186,7 +191,7 @@ export default function TablePage() {
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to send request. Please try again.",
+        description: error.message || "Failed to send request. Please try again.",
         variant: "destructive",
       });
       console.error("Failed to create request:", error);
