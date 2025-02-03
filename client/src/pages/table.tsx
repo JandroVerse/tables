@@ -183,7 +183,7 @@ export default function TablePage() {
     enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData && !!restaurantId && !isNaN(restaurantId),
   });
 
-    const handleWaterRequest = () => {
+  const handleWaterRequest = () => {
     console.log('Water request initiated:', {
       waterCount,
       tableId,
