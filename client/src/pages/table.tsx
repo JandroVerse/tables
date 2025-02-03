@@ -153,7 +153,10 @@ export default function TablePage() {
       if (sessionExpiryTime) {
         const now = new Date();
         if (sessionExpiryTime > now) {
-          setRemainingTime(formatDistance(sessionExpiryTime, now, { addSuffix: true }));
+          const distance = sessionExpiryTime.getTime() - now.getTime();
+          const hours = Math.floor(distance / (1000 * 60 * 60));
+          const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+          setRemainingTime(`expires in ${hours}h ${minutes}m`);
         } else {
           setRemainingTime("Session expired");
           // Optionally redirect or show expired message
@@ -172,7 +175,8 @@ export default function TablePage() {
     }
 
     updateRemainingTime();
-    const interval = setInterval(updateRemainingTime, 60000); // Update every minute
+    // Update every 30 seconds instead of every minute
+    const interval = setInterval(updateRemainingTime, 30000);
 
     return () => clearInterval(interval);
   }, [sessionExpiryTime, tableId]);
@@ -452,7 +456,7 @@ export default function TablePage() {
               </CardTitle>
               {remainingTime && (
                 <div className="text-center text-sm text-muted-foreground">
-                  Session expires {remainingTime}
+                  Session {remainingTime}
                 </div>
               )}
               <div className="text-center text-sm text-muted-foreground mt-2">
