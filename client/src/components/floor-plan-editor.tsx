@@ -109,42 +109,41 @@ const DraggableTable = ({
       let newX = startPosX;
       let newY = startPosY;
 
+      // Immediately update size and position based on mouse movement
       switch (handle) {
         case 'top-left':
-          newWidth = Math.max(80, startWidth - dx);
-          newHeight = Math.max(80, startHeight - dy);
+          newWidth = Math.min(300, Math.max(80, startWidth - dx));
+          newHeight = Math.min(300, Math.max(80, startHeight - dy));
           newX = startPosX + (startWidth - newWidth);
           newY = startPosY + (startHeight - newHeight);
           break;
         case 'top-right':
-          newWidth = Math.max(80, startWidth + dx);
-          newHeight = Math.max(80, startHeight - dy);
+          newWidth = Math.min(300, Math.max(80, startWidth + dx));
+          newHeight = Math.min(300, Math.max(80, startHeight - dy));
           newY = startPosY + (startHeight - newHeight);
           break;
         case 'bottom-left':
-          newWidth = Math.max(80, startWidth - dx);
-          newHeight = Math.max(80, startHeight + dy);
+          newWidth = Math.min(300, Math.max(80, startWidth - dx));
+          newHeight = Math.min(300, Math.max(80, startHeight + dy));
           newX = startPosX + (startWidth - newWidth);
           break;
         case 'bottom-right':
-          newWidth = Math.max(80, startWidth + dx);
-          newHeight = Math.max(80, startHeight + dy);
+          newWidth = Math.min(300, Math.max(80, startWidth + dx));
+          newHeight = Math.min(300, Math.max(80, startHeight + dy));
           break;
       }
 
-      // Apply max constraints
-      newWidth = Math.min(300, newWidth);
-      newHeight = Math.min(300, newHeight);
-
+      // Update local state immediately for visual feedback
       setSize({ width: newWidth, height: newHeight });
       setPosition({ x: newX, y: newY });
-      onResize(table.id, { width: newWidth, height: newHeight });
-      onDragStop(table.id, { x: newX, y: newY });
     };
 
     const handleEnd = () => {
       setResizing(false);
       setResizeHandle(null);
+      // Only notify parent of changes after resize is complete
+      onResize(table.id, size);
+      onDragStop(table.id, position);
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleEnd);
     };
@@ -218,7 +217,6 @@ const DraggableTable = ({
             />
           </>
         )}
-
         {/* Delete button */}
         {editMode && (
           <div className="absolute -top-8 left-1/2 -translate-x-1/2">
