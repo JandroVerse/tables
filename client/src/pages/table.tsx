@@ -50,35 +50,51 @@ const statusVariants = {
   completed: { color: "#0284c7" }
 };
 
-export default function TablePage() {
+export default function TablePage({ params }: { params: { restaurantId: string, tableId: string } }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const tableId = Number(new URLSearchParams(window.location.search).get("id"));
+  const restaurantId = Number(params.restaurantId);
+  const tableId = Number(params.tableId);
   const [otherRequestNote, setOtherRequestNote] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isWaterDialogOpen, setIsWaterDialogOpen] = useState(false);
   const [waterCount, setWaterCount] = useState(1);
+  const [isValidating, setIsValidating] = useState(true);
+  const [isValid, setIsValid] = useState(false);
 
+  // Verify the table exists first
   useEffect(() => {
-    if (tableId && !isNaN(tableId)) {
-      apiRequest("POST", `/api/tables/${tableId}/sessions`)
-        .then((res) => res.json())
+    if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
+      fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.valid) {
+            setIsValid(true);
+            // Only create session if table is valid
+            return apiRequest("POST", `/api/tables/${tableId}/sessions`);
+          }
+          throw new Error("Invalid table");
+        })
+        .then(res => res.json())
         .then((session) => {
           setSessionId(session.sessionId);
           queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
         })
         .catch((error) => {
-          console.error("Failed to create session:", error);
+          console.error("Failed to verify table or create session:", error);
           toast({
             title: "Error",
-            description: "Failed to initialize table session.",
+            description: "This table appears to be invalid or no longer exists.",
             variant: "destructive",
           });
+        })
+        .finally(() => {
+          setIsValidating(false);
         });
     }
-  }, [tableId]);
+  }, [restaurantId, tableId]);
 
   useEffect(() => {
     wsService.connect();
@@ -152,7 +168,51 @@ export default function TablePage() {
     },
   });
 
-  if (!tableId || isNaN(tableId)) return <div>Invalid table ID</div>;
+    if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card>
+          <CardHeader>
+            <CardTitle>Invalid Table</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>This table appears to be invalid. Please scan a valid QR code.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isValidating) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading...</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>Verifying table information...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+    if (!isValid) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card>
+          <CardHeader>
+            <CardTitle>Invalid Table</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>This table appears to be invalid or no longer exists. Please scan a valid QR code.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!sessionId) return <div>Initializing table session...</div>;
 
   const hasActiveRequest = (type: string) => {
