@@ -14,8 +14,8 @@ export function Navbar() {
 
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center justify-between">
-        <div className="font-semibold">
+      <div className="flex h-14 items-center justify-between px-8">
+        <div className="font-semibold text-lg">
           {currentRestaurant 
             ? `${currentRestaurant.name} Dashboard`
             : "Dashboard"}
@@ -24,7 +24,7 @@ export function Navbar() {
           variant="ghost" 
           size="sm"
           onClick={() => logoutMutation.mutate()}
-          disabled={logoutMutation.isPending}
+          className="hover:bg-destructive/10"
         >
           {logoutMutation.isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
