@@ -138,7 +138,7 @@ export default function TablePage() {
     queryKey: ["/api/requests", tableId],
     queryFn: async () => {
       if (!sessionId) return [];
-      const res = await fetch(`/api/requests?tableId=${tableId}&sessionId=${sessionId}`);
+      const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`);
       if (!res.ok) throw new Error("Failed to fetch requests");
       return res.json();
     },
@@ -150,6 +150,7 @@ export default function TablePage() {
       if (!sessionId) throw new Error("No active session");
       const response = await apiRequest("POST", "/api/requests", {
         tableId,
+        restaurantId,
         type,
         notes,
         sessionId,
