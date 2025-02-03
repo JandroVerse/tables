@@ -148,7 +148,7 @@ export default function TablePage() {
   }, [tableId, queryClient]);
 
   const { data: requests = [] } = useQuery<Request[]>({
-    queryKey: ["/api/requests", tableId],
+    queryKey: ["/api/requests", tableId, restaurantId],
     queryFn: async () => {
       if (!sessionId) return [];
       const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`);
@@ -159,7 +159,7 @@ export default function TablePage() {
         tableName: tableData?.name
       }));
     },
-    enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData,
+    enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData && !!restaurantId && !isNaN(restaurantId),
   });
 
   const { mutate: createRequest } = useMutation({

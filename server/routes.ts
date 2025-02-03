@@ -317,21 +317,27 @@ export function registerRoutes(app: Express): Server {
 
   // Request routes
   app.get("/api/requests", async (req, res) => {
-    const { tableId, sessionId } = req.query;
+    const { tableId, restaurantId, sessionId } = req.query;
     let query = {};
 
-    if (tableId && sessionId) {
+    if (tableId && sessionId && restaurantId) {
       query = {
         where: and(
           eq(requests.tableId, Number(tableId)),
-          eq(requests.sessionId, sessionId as string)
+          eq(requests.sessionId, sessionId as string),
+          eq(tables.restaurantId, Number(restaurantId))
         )
       };
     } else if (tableId) {
       query = { where: eq(requests.tableId, Number(tableId)) };
     }
 
-    const allRequests = await db.query.requests.findMany(query);
+    const allRequests = await db.query.requests.findMany({
+      ...query,
+      with: {
+        table: true
+      }
+    });
     res.json(allRequests);
   });
 
