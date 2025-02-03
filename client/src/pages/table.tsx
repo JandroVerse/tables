@@ -101,7 +101,39 @@ export default function TablePage() {
         setTableData(tableInfo);
         setIsValid(true);
 
-        // Get or join session
+        // Try to get existing session from localStorage first
+        const storedSession = localStorage.getItem(`table_session_${tableId}`);
+        let existingSession = null;
+
+        if (storedSession) {
+          try {
+            const session = JSON.parse(storedSession);
+            const expiryTime = new Date(session.expiry);
+
+            // Only use stored session if it hasn't expired
+            if (expiryTime > new Date()) {
+              console.log('Found valid stored session:', session);
+              existingSession = session;
+              setSessionId(session.id);
+              setSessionExpiryTime(expiryTime);
+
+              // Connect WebSocket with existing session
+              wsService.disconnect();
+              wsService.connect(session.id);
+
+              // Return early since we have a valid session
+              return;
+            } else {
+              console.log('Stored session has expired');
+              localStorage.removeItem(`table_session_${tableId}`);
+            }
+          } catch (e) {
+            console.error("Failed to parse stored session:", e);
+          }
+        }
+
+        // If no valid stored session, create a new one
+        console.log('Creating new session');
         const sessionResponse = await fetch(
           `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`,
           {
@@ -111,7 +143,7 @@ export default function TablePage() {
         );
 
         const sessionData = await sessionResponse.json();
-        console.log('Session data:', sessionData);
+        console.log('New session data:', sessionData);
 
         // Set session data and initialize WebSocket
         const newSessionId = sessionData.sessionId;
@@ -126,7 +158,6 @@ export default function TablePage() {
           id: newSessionId,
           expiry: expiryTime.toISOString()
         }));
-        localStorage.setItem('sessionId', newSessionId);
 
         wsService.disconnect(); // Clean up any existing connection
         wsService.connect(newSessionId); // Connect with new session ID
