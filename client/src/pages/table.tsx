@@ -352,53 +352,6 @@ export default function TablePage() {
     },
   });
 
-  if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card>
-          <CardHeader>
-            <CardTitle>Invalid Table</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>This table appears to be invalid. Please scan a valid QR code.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (isValidating) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card>
-          <CardHeader>
-            <CardTitle>Loading...</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>Verifying table information...</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!isValid) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card>
-          <CardHeader>
-            <CardTitle>Invalid Table</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>This table appears to be invalid or no longer exists. Please scan a valid QR code.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!sessionId) return <div>Initializing table session...</div>;
-
   const hasActiveRequest = (type: string) => {
     return requests.some(
       (request) =>
@@ -469,401 +422,432 @@ export default function TablePage() {
   }, [sessionId, tableId, restaurantId, queryClient]);
 
   return (
-    <div className="min-h-screen">
-      <div className="relative z-0">
+    <div className="min-h-screen relative">
+      <div className="fixed inset-0 z-0">
         <AnimatedBackground />
       </div>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 p-4"
-      >
-        <Card className="max-w-md mx-auto shadow-lg border-0">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
-              {tableData ? tableData.name : 'Loading...'}
-            </CardTitle>
-            <div className="text-center text-sm text-muted-foreground">
+      <div className="relative z-10 p-4 min-h-screen flex items-center justify-center">
+        {!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId) ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Invalid Table</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>This table appears to be invalid. Please scan a valid QR code.</p>
+            </CardContent>
+          </Card>
+        ) : isValidating ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Loading...</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>Verifying table information...</p>
+            </CardContent>
+          </Card>
+        ) : !isValid ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Invalid Table</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>This table appears to be invalid or no longer exists. Please scan a valid QR code.</p>
+            </CardContent>
+          </Card>
+        ) : !sessionId ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Initializing...</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>Initializing table session...</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="max-w-md mx-auto shadow-lg border-0 bg-white/95">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
+                {tableData ? tableData.name : 'Loading...'}
+              </CardTitle>
               {remainingTime && (
-                <div className="mt-1">
+                <div className="text-center text-sm text-muted-foreground">
                   Session expires {remainingTime}
                 </div>
               )}
-            </div>
-            <div className="text-center text-sm text-muted-foreground">
-              How can we help you?
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <motion.div
-                variants={buttonVariants}
-                initial="idle"
-                whileHover="hover"
-                whileTap="tap"
-              >
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      size="lg"
-                      className="h-28 w-full flex flex-col items-center justify-center space-y-3"
-                      disabled={hasActiveRequest("waiter")}
-                      title={
-                        hasActiveRequest("waiter")
-                          ? "Waiter request is being processed"
-                          : ""
-                      }
-                    >
-                      <Bell className="h-8 w-8" />
-                      <span className="font-medium">Call Waiter</span>
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Call Waiter</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Would you like to call a waiter to your table?
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleWaiterRequest}
-                      >
-                        Yes, Call Waiter
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </motion.div>
-
-              <Dialog open={isWaterDialogOpen} onOpenChange={setIsWaterDialogOpen}>
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                How can we help you?
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
                 <motion.div
                   variants={buttonVariants}
                   initial="idle"
                   whileHover="hover"
                   whileTap="tap"
                 >
-                  <Button
-                    size="lg"
-                    className="h-28 w-full flex flex-col items-center justify-center space-y-3"
-                    onClick={() => setIsWaterDialogOpen(true)}
-                    disabled={hasActiveRequest("water")}
-                    title={
-                      hasActiveRequest("water")
-                        ? "Water refill request is being processed"
-                        : ""
-                    }
-                  >
-                    <GlassWater className="h-8 w-8" />
-                    <span className="font-medium">Water Refill</span>
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="lg"
+                        className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                        disabled={hasActiveRequest("waiter")}
+                        title={
+                          hasActiveRequest("waiter")
+                            ? "Waiter request is being processed"
+                            : ""
+                        }
+                      >
+                        <Bell className="h-8 w-8" />
+                        <span className="font-medium">Call Waiter</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Call Waiter</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Would you like to call a waiter to your table?
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleWaiterRequest}
+                        >
+                          Yes, Call Waiter
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </motion.div>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>How many waters would you like?</DialogTitle>
-                  </DialogHeader>
-                  <div className="py-6">
-                    <div className="flex items-center justify-center gap-4">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setWaterCount(Math.max(1, waterCount - 1))}
-                        className="h-8 w-8"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <span className="text-2xl font-semibold w-12 text-center">
-                        {waterCount}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setWaterCount(Math.min(10, waterCount + 1))}
-                        className="h-8 w-8"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      onClick={() => {
-                        handleWaterRequest();
-                        setIsWaterDialogOpen(false);
-                        setWaterCount(1);
-                      }}
-                    >
-                      Confirm
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
 
-              <motion.div
-                variants={buttonVariants}
-                initial="idle"
-                whileHover="hover"
-                whileTap="tap"
-              >
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
+                <Dialog open={isWaterDialogOpen} onOpenChange={setIsWaterDialogOpen}>
+                  <motion.div
+                    variants={buttonVariants}
+                    initial="idle"
+                    whileHover="hover"
+                    whileTap="tap"
+                  >
                     <Button
                       size="lg"
                       className="h-28 w-full flex flex-col items-center justify-center space-y-3"
-                      disabled={hasActiveRequest("check")}
+                      onClick={() => setIsWaterDialogOpen(true)}
+                      disabled={hasActiveRequest("water")}
                       title={
-                        hasActiveRequest("check")
-                          ? "Check request is being processed"
+                        hasActiveRequest("water")
+                          ? "Water refill request is being processed"
                           : ""
                       }
                     >
-                      <Receipt className="h-8 w-8" />
-                      <span className="font-medium">Get Check</span>
+                      <GlassWater className="h-8 w-8" />
+                      <span className="font-medium">Water Refill</span>
                     </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Request Check</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Would you like to request the check for your table?
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() => createRequest({ type: "check" })}
+                  </motion.div>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>How many waters would you like?</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-6">
+                      <div className="flex items-center justify-center gap-4">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setWaterCount(Math.max(1, waterCount - 1))}
+                          className="h-8 w-8"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <span className="text-2xl font-semibold w-12 text-center">
+                          {waterCount}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setWaterCount(Math.min(10, waterCount + 1))}
+                          className="h-8 w-8"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        onClick={() => {
+                          handleWaterRequest();
+                          setIsWaterDialogOpen(false);
+                          setWaterCount(1);
+                        }}
                       >
-                        Yes, Get Check
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </motion.div>
+                        Confirm
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <motion.div
                   variants={buttonVariants}
                   initial="idle"
                   whileHover="hover"
                   whileTap="tap"
                 >
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="h-28 w-full flex flex-col items-center justify-center space-y-3"
-                    onClick={() => setIsDialogOpen(true)}
-                  >
-                    <Clock className="h-8 w-8" />
-                    <span className="font-medium">Other Request</span>
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="lg"
+                        className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                        disabled={hasActiveRequest("check")}
+                        title={
+                          hasActiveRequest("check")
+                            ? "Check request is being processed"
+                            : ""
+                        }
+                      >
+                        <Receipt className="h-8 w-8" />
+                        <span className="font-medium">Get Check</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Request Check</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Would you like to request the check for your table?
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => createRequest({ type: "check" })}
+                        >
+                          Yes, Get Check
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </motion.div>
-                <DialogContent>
-                  <DialogHeader className="p-6 pb-0">
-                    <DialogTitle className="text-xl font-semibold">
-                      Other Request
-                    </DialogTitle>
-                  </DialogHeader>
-                  <div className="px-6 py-4">
-                    <div className="space-y-3">
-                      <Label htmlFor="message" className="text-sm font-medium">
-                        Your Request
-                      </Label>
-                      <Input
-                        id="message"
-                        placeholder="Type your request here..."
-                        value={otherRequestNote}
-                        onChange={(e) => setOtherRequestNote(e.target.value)}
-                        className="min-h-[40px]"
-                        autoFocus={false}
-                        tabIndex={-1}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter className="p-6 pt-0">
-                    <Button onClick={handleOtherRequest} className="w-full">
-                      Send Request
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
 
-            {requests.length > 0 && (
-              <Tabs defaultValue="active" className="mt-8">
-                <TabsList className="w-full grid grid-cols-2">
-                  <TabsTrigger value="active">Active Requests</TabsTrigger>
-                  <TabsTrigger value="completed">Completed</TabsTrigger>
-                </TabsList>
-                <TabsContent value="active" className="mt-4">
-                  <AnimatePresence mode="popLayout">
-                    <div className="space-y-3">
-                      {requests
-                        .filter(
-                          (r) => r.status !== "completed" && r.status !== "cleared"
-                        )
-                        .map((request) => (
-                          <motion.div
-                            key={request.id}
-                            layout
-                            variants={cardVariants}
-                            initial="initial"
-                            animate="animate"
-                            exit="exit"
-                            transition={{
-                              layout: { duration: 0.3 },
-                              opacity: { duration: 0.2 },
-                            }}
-                          >
-                            <Card
-                              className={`overflow-hidden transition-colors ${
-                                request.type === "waiter"
-                                  ? "hover:bg-purple-300 bg-purple-200"
-                                  : request.type === "water"
-                                  ? "hover:bg-blue-200 bg-blue-100"
-                                  : request.type === "check"
-                                  ? "hover:bg-emerald-300 bg-emerald-200"
-                                  : "hover:bg-green-50/50"
-                              }`}
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <motion.div
+                    variants={buttonVariants}
+                    initial="idle"
+                    whileHover="hover"
+                    whileTap="tap"
+                  >
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                      onClick={() => setIsDialogOpen(true)}
+                    >
+                      <Clock className="h-8 w-8" />
+                      <span className="font-medium">Other Request</span>
+                    </Button>
+                  </motion.div>
+                  <DialogContent>
+                    <DialogHeader className="p-6 pb-0">
+                      <DialogTitle className="text-xl font-semibold">
+                        Other Request
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="px-6 py-4">
+                      <div className="space-y-3">
+                        <Label htmlFor="message" className="text-sm font-medium">
+                          Your Request
+                        </Label>
+                        <Input
+                          id="message"
+                          placeholder="Type your request here..."
+                          value={otherRequestNote}
+                          onChange={(e) => setOtherRequestNote(e.target.value)}
+                          className="min-h-[40px]"
+                          autoFocus={false}
+                          tabIndex={-1}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter className="p-6 pt-0">
+                      <Button onClick={handleOtherRequest} className="w-full">
+                        Send Request
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {requests.length > 0 && (
+                <Tabs defaultValue="active" className="mt-8">
+                  <TabsList className="w-full grid grid-cols-2">
+                    <TabsTrigger value="active">Active Requests</TabsTrigger>
+                    <TabsTrigger value="completed">Completed</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="active" className="mt-4">
+                    <AnimatePresence mode="popLayout">
+                      <div className="space-y-3">
+                        {requests
+                          .filter(
+                            (r) => r.status !== "completed" && r.status !== "cleared"
+                          )
+                          .map((request) => (
+                            <motion.div
+                              key={request.id}
+                              layout
+                              variants={cardVariants}
+                              initial="initial"
+                              animate="animate"
+                              exit="exit"
+                              transition={{
+                                layout: { duration: 0.3 },
+                                opacity: { duration: 0.2 },
+                              }}
                             >
-                              <CardContent className="p-4">
-                                <div className="font-medium text-primary">
-                                  {request.type}
-                                </div>
-                                {request.notes && (
-                                  <div className="text-sm text-gray-600 mt-2">
-                                    {request.notes}
+                              <Card
+                                className={`overflow-hidden transition-colors ${
+                                  request.type === "waiter"
+                                    ? "hover:bg-purple-300 bg-purple-200"
+                                    : request.type === "water"
+                                    ? "hover:bg-blue-200 bg-blue-100"
+                                    : request.type === "check"
+                                    ? "hover:bg-emerald-300 bg-emerald-200"
+                                    : "hover:bg-green-50/50"
+                                }`}
+                              >
+                                <CardContent className="p-4">
+                                  <div className="font-medium text-primary">
+                                    {request.type}
                                   </div>
-                                )}
-                                <div className="flex justify-between items-center mt-2">
-                                  <motion.div
-                                    className="text-sm"
-                                    variants={statusVariants}
-                                    animate={request.status}
-                                    transition={{ duration: 0.3 }}
-                                  >
-                                    Status:{" "}
-                                    <span className="capitalize">
-                                      {request.status.replace("_", " ")}
-                                    </span>
-                                  </motion.div>
-                                  {request.status === "pending" && (
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <motion.div
-                                          variants={buttonVariants}
-                                          initial="idle"
-                                          whileHover="hover"
-                                          whileTap="tap"
-                                        >
-                                          <Button variant="outline" size="sm">
-                                            Cancel Request
-                                          </Button>
-                                        </motion.div>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>
-                                            Cancel Request?
-                                          </AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            Are you sure you want to cancel this
-                                            request? This action cannot be
-                                            undone.
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>
-                                            No, keep it
-                                          </AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() =>
-                                              cancelRequest(request.id)
-                                            }
-                                          >
-                                            Yes, cancel it
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
+                                  {request.notes && (
+                                    <div className="text-sm text-gray-600 mt-2">
+                                      {request.notes}
+                                    </div>
                                   )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </motion.div>
-                        ))}
-                    </div>
-                  </AnimatePresence>
-                </TabsContent>
-                <TabsContent value="completed" className="mt-4">
-                  <AnimatePresence mode="popLayout">
-                    <div className="space-y-3">
-                      {requests
-                        .filter((r) => r.status === "completed")
-                        .map((request) => (
-                          <motion.div
-                            key={request.id}
-                            layout
-                            variants={cardVariants}
-                            initial="initial"
-                            animate="animate"
-                            exit="exit"
-                            transition={{
-                              layout: { duration: 0.3 },
-                              opacity: { duration: 0.2 },
-                            }}
-                          >
-                            <Card className="overflow-hidden transition-colors hover:bg-green-50/50">
-                              <CardContent className="p-4">
-                                <div className="font-medium text-primary">
-                                  {request.type}
-                                </div>
-                                {request.notes && (
-                                  <div className="text-sm text-gray-600 mt-2">
-                                    {request.notes}
-                                  </div>
-                                )}
-                                <div className="flex justify-between items-center mt-3">
-                                  <div className="text-sm text-gray-500">
-                                    Completed
-                                  </div>
-                                  <motion.div
-                                    variants={buttonVariants}
-                                    initial="idle"
-                                    whileHover="hover"
-                                    whileTap="tap"
-                                  >
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setFeedbackRequest(request)}
-                                      className="hover:border-primary/50"
+                                  <div className="flex justify-between items-center mt-2">
+                                    <motion.div
+                                      className="text-sm"
+                                      variants={statusVariants}
+                                      animate={request.status}
+                                      transition={{ duration: 0.3 }}
                                     >
-                                      Rate Service
-                                    </Button>
-                                  </motion.div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </motion.div>
-                        ))}
-                    </div>
-                  </AnimatePresence>
-                </TabsContent>
-              </Tabs>
-            )}
+                                      Status:{" "}
+                                      <span className="capitalize">
+                                        {request.status.replace("_", " ")}
+                                      </span>
+                                    </motion.div>
+                                    {request.status === "pending" && (
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <motion.div
+                                            variants={buttonVariants}
+                                            initial="idle"
+                                            whileHover="hover"
+                                            whileTap="tap"
+                                          >
+                                            <Button variant="outline" size="sm">
+                                              Cancel Request
+                                            </Button>
+                                          </motion.div>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>
+                                              Cancel Request?
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              Are you sure you want to cancel this
+                                              request? This action cannot be
+                                              undone.
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>
+                                              No, keep it
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() =>
+                                                cancelRequest(request.id)
+                                              }
+                                            >
+                                              Yes, cancel it
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    )}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </motion.div>
+                          ))}
+                      </div>
+                    </AnimatePresence>
+                  </TabsContent>
+                  <TabsContent value="completed" className="mt-4">
+                    <AnimatePresence mode="popLayout">
+                      <div className="space-y-3">
+                        {requests
+                          .filter((r) => r.status === "completed")
+                          .map((request) => (
+                            <motion.div
+                              key={request.id}
+                              layout
+                              variants={cardVariants}
+                              initial="initial"
+                              animate="animate"
+                              exit="exit"
+                              transition={{
+                                layout: { duration: 0.3 },
+                                opacity: { duration: 0.2 },
+                              }}
+                            >
+                              <Card className="overflow-hidden transition-colors hover:bg-green-50/50">
+                                <CardContent className="p-4">
+                                  <div className="font-medium text-primary">
+                                    {request.type}
+                                  </div>
+                                  {request.notes && (
+                                    <div className="text-sm text-gray-600 mt-2">
+                                      {request.notes}
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center mt-3">
+                                    <div className="text-sm text-gray-500">
+                                      Completed
+                                    </div>
+                                    <motion.div
+                                      variants={buttonVariants}
+                                      initial="idle"
+                                      whileHover="hover"
+                                      whileTap="tap"
+                                    >
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setFeedbackRequest(request)}
+                                        className="hover:border-primary/50"
+                                      >
+                                        Rate Service
+                                      </Button>
+                                    </motion.div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </motion.div>
+                          ))}
+                      </div>
+                    </AnimatePresence>
+                  </TabsContent>
+                </Tabs>
+              )}
 
-            {feedbackRequest && (
-              <FeedbackDialog
-                request={feedbackRequest}
-                open={true}
-                onClose={() => setFeedbackRequest(null)}
-              />
-            )}
-          </CardContent>
-        </Card>
-      </motion.div>
+              {feedbackRequest && (
+                <FeedbackDialog
+                  request={feedbackRequest}
+                  open={true}
+                  onClose={() => setFeedbackRequest(null)}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
