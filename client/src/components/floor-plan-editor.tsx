@@ -43,6 +43,135 @@ interface TableWithPosition extends Table {
   position: TablePosition;
 }
 
+interface DraggableTableProps {
+  table: TableWithPosition;
+  onDragStop: (tableId: number, position: { x: number; y: number }) => void;
+  onResize: (tableId: number, size: { width: number; height: number }) => void;
+  onDelete: (tableId: number) => void;
+  selected: boolean;
+  onClick: () => void;
+  activeRequests: Request[];
+  editMode: boolean;
+}
+
+const RequestIndicator = ({ type }: { type: string }) => {
+  const icons = {
+    water: <GlassWater className="h-5 w-5 text-blue-500" />,
+    waiter: <Bell className="h-5 w-5 text-purple-500" />,
+    check: <Receipt className="h-5 w-5 text-emerald-500" />,
+    other: <MessageSquare className="h-5 w-5 text-gray-500" />
+  };
+
+  return icons[type as keyof typeof icons] || icons.other;
+};
+
+const DraggableTable = ({
+  table,
+  onDragStop,
+  onResize,
+  onDelete,
+  selected,
+  onClick,
+  activeRequests,
+  editMode,
+}: DraggableTableProps) => {
+  const [size, setSize] = useState({ 
+    width: table.position.width || 100, 
+    height: table.position.height || 100 
+  });
+  const [position, setPosition] = useState({ 
+    x: table.position.x || 0, 
+    y: table.position.y || 0 
+  });
+
+  useEffect(() => {
+    setSize({ 
+      width: table.position.width || 100, 
+      height: table.position.height || 100 
+    });
+    setPosition({ 
+      x: table.position.x || 0, 
+      y: table.position.y || 0 
+    });
+  }, [table.position]);
+
+  return (
+    <Draggable
+      position={position}
+      onDrag={(e, data) => setPosition({ x: data.x, y: data.y })}
+      onStop={(e, data) => onDragStop(table.id, data)}
+      disabled={!editMode}
+      bounds="parent"
+    >
+      <div
+        className={`absolute cursor-move ${
+          table.position.shape === "round" ? "rounded-full" : "rounded-lg"
+        } ${
+          selected ? "ring-2 ring-primary" : ""
+        } bg-green-100 hover:bg-green-200 transition-colors`}
+        style={{
+          width: size.width,
+          height: size.height,
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+      >
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="font-medium text-gray-800">{table.name}</span>
+        </div>
+        {editMode && (
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="icon" className="h-6 w-6">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete {table.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete the
+                    table and all its associated data.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => onDelete(table.id)}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
+        <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
+          <div className="flex gap-2">
+            <AnimatePresence>
+              {activeRequests.map((request) => (
+                <motion.div
+                  key={request.id}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  className="bg-white rounded-full p-1 shadow-lg"
+                >
+                  <RequestIndicator type={request.type} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+    </Draggable>
+  );
+};
+
 interface FloorPlanEditorProps {
   restaurantId: number;
 }
@@ -130,15 +259,15 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   const handleAddTable = () => {
     if (!newTableName.trim()) return;
 
-    const position: TablePosition = {
-      x: 100,
-      y: 100,
+    const defaultPosition: TablePosition = {
+      x: 50,
+      y: 50,
       width: 100,
       height: 100,
       shape: selectedShape,
     };
 
-    createTable({ name: newTableName, position });
+    createTable({ name: newTableName, position: defaultPosition });
   };
 
   const getActiveRequests = (tableId: number) => {
