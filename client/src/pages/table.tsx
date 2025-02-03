@@ -86,12 +86,14 @@ export default function TablePage() {
 
   useEffect(() => {
     if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
+      console.log(`Fetching table ${tableId} for restaurant ${restaurantId}`);
+
       fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`)
         .then(async (res) => {
           if (!res.ok) throw new Error("Invalid table");
-          const tableData = await res.json();
-          console.log('Fetched table data:', tableData);
-          setTableData(tableData);
+          const data = await res.json();
+          console.log('Raw table data received:', data);
+          setTableData(data);
           setIsValid(true);
 
           if (!sessionId) {
@@ -101,6 +103,7 @@ export default function TablePage() {
         })
         .then((res) => res.json())
         .then((session) => {
+          console.log('Session data:', session);
           setSessionId(session.sessionId);
           localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
             id: session.sessionId,
@@ -260,7 +263,7 @@ export default function TablePage() {
       });
       return;
     }
-     if (hasActiveRequest("other") && requests.some(
+    if (hasActiveRequest("other") && requests.some(
       (r) => r.type === "other" &&
             r.notes === otherRequestNote &&
             r.status !== "completed"
@@ -291,7 +294,7 @@ export default function TablePage() {
             <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
               {tableData ? `Table ${tableData.name}` : 'Loading...'}
             </CardTitle>
-             <div className="text-center text-sm text-muted-foreground">
+            <div className="text-center text-sm text-muted-foreground">
               How can we help you?
             </div>
           </CardHeader>
