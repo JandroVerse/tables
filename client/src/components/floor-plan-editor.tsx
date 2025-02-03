@@ -109,8 +109,8 @@ const DraggableTable = ({
     const handleMove = (e: MouseEvent | TouchEvent) => {
       if (!resizing) return;
 
-      const currentX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
-      const currentY = 'touches' in e ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY;
+      const currentX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const currentY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
 
       const deltaX = currentX - startX;
       const deltaY = currentY - startY;
@@ -119,11 +119,11 @@ const DraggableTable = ({
       const newHeight = Math.max(80, Math.min(300, startHeight + deltaY));
 
       setSize({ width: newWidth, height: newHeight });
-      onResize(table.id, { width: newWidth, height: newHeight });
     };
 
     const handleEnd = () => {
       setResizing(false);
+      onResize(table.id, size);
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleEnd);
       window.removeEventListener('touchmove', handleMove);
@@ -179,25 +179,6 @@ const DraggableTable = ({
           />
         )}
 
-        {/* Request indicators */}
-        <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
-          <div className="flex gap-2">
-            <AnimatePresence>
-              {activeRequests.map((request) => (
-                <motion.div
-                  key={request.id}
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  className="bg-white rounded-full p-1 shadow-lg"
-                >
-                  <RequestIndicator type={request.type} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
-
         {/* Delete button */}
         {editMode && (
           <div className="absolute -top-8 left-1/2 -translate-x-1/2">
@@ -228,6 +209,25 @@ const DraggableTable = ({
             </AlertDialog>
           </div>
         )}
+
+        {/* Request indicators */}
+        <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
+          <div className="flex gap-2">
+            <AnimatePresence>
+              {activeRequests.map((request) => (
+                <motion.div
+                  key={request.id}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  className="bg-white rounded-full p-1 shadow-lg"
+                >
+                  <RequestIndicator type={request.type} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        </div>
       </div>
     </Draggable>
   );
