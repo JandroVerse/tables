@@ -69,9 +69,9 @@ export function AnimatedBackground() {
               scale: [1, 1.5, 1],
             }}
             transition={{
-              duration: Math.random() * 4 + 3,
+              duration: Math.random() * 6 + 6,
               repeat: Infinity,
-              delay: Math.random() * 2,
+              delay: Math.random() * 4,
             }}
           />
         ))}

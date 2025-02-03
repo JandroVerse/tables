@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 type ServiceRequestListener = (data: any) => void;
 
 interface WebSocketMessage {
@@ -26,11 +28,14 @@ class WebSocketService {
     const host = window.location.host;
     const sessionId = localStorage.getItem('sessionId');
 
+    if (!sessionId) {
+      console.log('WebSocket: No session ID available, delaying connection');
+      return;
+    }
+
     // Include session ID in query params for initial authentication
     const wsUrl = new URL(`${protocol}//${host}/ws`);
-    if (sessionId) {
-      wsUrl.searchParams.append('sessionId', sessionId);
-    }
+    wsUrl.searchParams.append('sessionId', sessionId);
 
     console.log('WebSocket: Attempting to connect to', wsUrl.toString());
 
@@ -47,9 +52,9 @@ class WebSocketService {
     };
 
     this.ws.onmessage = (event) => {
-      console.log('WebSocket: Received message', event.data);
       try {
         const data = JSON.parse(event.data);
+        console.log('WebSocket: Received message', data);
         this.listeners.forEach(listener => listener(data));
       } catch (error) {
         console.error('WebSocket: Error parsing message', error);
@@ -88,18 +93,18 @@ class WebSocketService {
       return;
     }
 
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('WebSocket: Sending message', message);
-      const sessionId = localStorage.getItem('sessionId');
-      if (!sessionId) {
-        console.error('WebSocket: No session ID available');
-        return;
-      }
+    const sessionId = localStorage.getItem('sessionId');
+    if (!sessionId) {
+      console.error('WebSocket: No session ID available');
+      return;
+    }
 
+    if (this.ws?.readyState === WebSocket.OPEN) {
       const messageWithSession = {
         ...message,
         sessionId
       };
+      console.log('WebSocket: Sending message', messageWithSession);
       this.ws.send(JSON.stringify(messageWithSession));
     } else {
       console.error('WebSocket: Cannot send message - connection not open', {
@@ -108,7 +113,6 @@ class WebSocketService {
         message
       });
       if (!this.isConnected) {
-        console.log('WebSocket: Attempting to reconnect before sending');
         this.connect();
       }
     }
