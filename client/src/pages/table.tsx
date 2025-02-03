@@ -165,21 +165,37 @@ export default function TablePage() {
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
       if (!sessionId) throw new Error("No active session");
-      console.log('Creating request with:', { tableId, restaurantId, type, notes, sessionId });
-      const response = await apiRequest("POST", "/api/requests", {
+      if (!restaurantId || !tableId) {
+        throw new Error("Invalid table or restaurant");
+      }
+
+      console.log('Attempting to create request:', {
         tableId,
         restaurantId,
+        sessionId,
+        type,
+        notes
+      });
+
+      const response = await apiRequest("POST", "/api/requests", {
+        tableId: Number(tableId),
+        restaurantId: Number(restaurantId),
+        sessionId,
         type,
         notes,
-        sessionId,
       });
+
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error);
+        const errorText = await response.text();
+        console.error('Failed to create request:', errorText);
+        throw new Error(errorText || "Failed to create request");
       }
-      return response.json();
+
+      const data = await response.json();
+      console.log('Successfully created request:', data);
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       setOtherRequestNote("");
       setIsDialogOpen(false);
@@ -187,8 +203,9 @@ export default function TablePage() {
         title: "Request sent",
         description: "Staff has been notified of your request.",
       });
+      console.log('Request created successfully:', data);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || "Failed to send request. Please try again.",

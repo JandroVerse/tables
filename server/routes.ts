@@ -378,7 +378,18 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/requests", async (req, res) => {
     const { tableId, restaurantId, sessionId, type, notes } = req.body;
-    console.log(`Creating request for table ${tableId} in restaurant ${restaurantId}`);
+    console.log('Received request creation:', {
+      tableId,
+      restaurantId,
+      sessionId,
+      type,
+      notes
+    });
+
+    if (!tableId || !restaurantId || !sessionId || !type) {
+      console.error('Missing required fields:', { tableId, restaurantId, sessionId, type });
+      return res.status(400).json({ message: "Missing required fields" });
+    }
 
     try {
       // Verify the table belongs to the specified restaurant
@@ -418,7 +429,10 @@ export function registerRoutes(app: Express): Server {
       res.json(request);
     } catch (error) {
       console.error('Error creating request:', error);
-      res.status(500).json({ message: "Failed to create request" });
+      res.status(500).json({ 
+        message: "Failed to create request",
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
