@@ -30,7 +30,7 @@ export function registerRoutes(app: Express): Server {
   // Setup authentication
   setupAuth(app);
 
-  // Update the WebSocket setup section
+  // WebSocket setup section
   wss.on("connection", (ws: WebSocket) => {
     console.log("New WebSocket connection");
     ws.on("message", (message: string) => {
@@ -84,7 +84,7 @@ export function registerRoutes(app: Express): Server {
     res.json(restaurant);
   });
 
-  // Table routes - updated for restaurant context
+  // Table routes - all within restaurant context
   app.get("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req, res) => {
     const { restaurantId } = req.params;
     const allTables = await db.query.tables.findMany({
@@ -141,7 +141,100 @@ export function registerRoutes(app: Express): Server {
 
     res.json(updatedTable);
   });
-  
+
+  // Update and delete table routes - within restaurant context
+  app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
+    const { restaurantId, tableId } = req.params;
+    const { position } = req.body;
+
+    // Verify restaurant ownership and table existence
+    const [restaurant] = await db.query.restaurants.findMany({
+      where: and(
+        eq(restaurants.id, Number(restaurantId)),
+        eq(restaurants.ownerId, req.user!.id)
+      ),
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    // Validate the position object
+    if (!position || typeof position !== 'object') {
+      return res.status(400).json({ message: "Invalid position data" });
+    }
+
+    try {
+      const [updatedTable] = await db
+        .update(tables)
+        .set({ position })
+        .where(and(
+          eq(tables.id, Number(tableId)),
+          eq(tables.restaurantId, Number(restaurantId))
+        ))
+        .returning();
+
+      if (!updatedTable) {
+        return res.status(404).json({ message: "Table not found" });
+      }
+
+      // Broadcast the update to all connected clients
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ 
+            type: "update_table", 
+            table: updatedTable 
+          }));
+        }
+      });
+
+      res.json(updatedTable);
+    } catch (error) {
+      console.error('Error updating table:', error);
+      res.status(500).json({ message: "Failed to update table position" });
+    }
+  });
+
+  app.delete("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
+    const { restaurantId, tableId } = req.params;
+
+    // Verify restaurant ownership
+    const [restaurant] = await db.query.restaurants.findMany({
+      where: and(
+        eq(restaurants.id, Number(restaurantId)),
+        eq(restaurants.ownerId, req.user!.id)
+      ),
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({ message: "Restaurant not found" });
+    }
+
+    await db.delete(requests).where(eq(requests.tableId, Number(tableId)));
+    const [deletedTable] = await db.delete(tables)
+      .where(and(
+        eq(tables.id, Number(tableId)),
+        eq(tables.restaurantId, Number(restaurantId))
+      ))
+      .returning();
+
+    if (!deletedTable) {
+      return res.status(404).json({ message: "Table not found" });
+    }
+
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ 
+          type: "delete_table", 
+          tableId,
+          restaurantId 
+        }));
+      }
+    });
+
+    res.json(deletedTable);
+  });
+
   // Session management
   app.post("/api/tables/:tableId/sessions", async (req, res) => {
     const tableId = Number(req.params.tableId);
@@ -167,64 +260,7 @@ export function registerRoutes(app: Express): Server {
     res.json(session);
   });
 
-  app.delete("/api/tables/:id", async (req, res) => {
-    const { id } = req.params;
-    await db.delete(requests).where(eq(requests.tableId, Number(id)));
-    const [deletedTable] = await db.delete(tables)
-      .where(eq(tables.id, Number(id)))
-      .returning();
-
-    if (!deletedTable) {
-      return res.status(404).json({ message: "Table not found" });
-    }
-
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "delete_table", tableId: id }));
-      }
-    });
-
-    res.json(deletedTable);
-  });
-
-  app.patch("/api/tables/:id", async (req, res) => {
-    const { id } = req.params;
-    const { position } = req.body;
-
-    // Validate the position object
-    if (!position || typeof position !== 'object') {
-      return res.status(400).json({ message: "Invalid position data" });
-    }
-
-    try {
-      const [updatedTable] = await db
-        .update(tables)
-        .set({ position })
-        .where(eq(tables.id, Number(id)))
-        .returning();
-
-      if (!updatedTable) {
-        return res.status(404).json({ message: "Table not found" });
-      }
-
-      // Broadcast the update to all connected clients
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ 
-            type: "update_table", 
-            table: updatedTable 
-          }));
-        }
-      });
-
-      res.json(updatedTable);
-    } catch (error) {
-      console.error('Error updating table:', error);
-      res.status(500).json({ message: "Failed to update table position" });
-    }
-  });
-
-    // Request routes
+  // Request routes
   app.get("/api/requests", async (req, res) => {
     const { tableId, sessionId } = req.query;
     let query = {};
@@ -285,7 +321,7 @@ export function registerRoutes(app: Express): Server {
     res.json(request);
   });
 
-    // Feedback routes
+  // Feedback routes
   app.post("/api/feedback", async (req, res) => {
     const { requestId, rating, comment } = req.body;
 
