@@ -152,9 +152,13 @@ export default function TablePage() {
       if (!sessionId) return [];
       const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`);
       if (!res.ok) throw new Error("Failed to fetch requests");
-      return res.json();
+      const data = await res.json();
+      return data.map((request: any) => ({
+        ...request,
+        tableName: tableData?.name
+      }));
     },
-    enabled: !!tableId && !isNaN(tableId) && !!sessionId,
+    enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData,
   });
 
   const { mutate: createRequest } = useMutation({
