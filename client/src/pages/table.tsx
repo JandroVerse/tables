@@ -164,12 +164,16 @@ export default function TablePage() {
 
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
-      if (!sessionId) throw new Error("No active session");
+      if (!sessionId) {
+        console.error('No active session');
+        throw new Error("No active session");
+      }
       if (!restaurantId || !tableId) {
+        console.error('Invalid table or restaurant', { restaurantId, tableId });
         throw new Error("Invalid table or restaurant");
       }
 
-      console.log('Attempting to create request:', {
+      console.log('Creating request with params:', {
         tableId,
         restaurantId,
         sessionId,
@@ -187,15 +191,16 @@ export default function TablePage() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Failed to create request:', errorText);
+        console.error('Request creation failed:', errorText);
         throw new Error(errorText || "Failed to create request");
       }
 
       const data = await response.json();
-      console.log('Successfully created request:', data);
+      console.log('Request created successfully:', data);
       return data;
     },
     onSuccess: (data) => {
+      console.log('Request mutation succeeded:', data);
       queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       setOtherRequestNote("");
       setIsDialogOpen(false);
@@ -203,15 +208,14 @@ export default function TablePage() {
         title: "Request sent",
         description: "Staff has been notified of your request.",
       });
-      console.log('Request created successfully:', data);
     },
     onError: (error: Error) => {
+      console.error('Request mutation failed:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to send request. Please try again.",
         variant: "destructive",
       });
-      console.error("Failed to create request:", error);
     },
   });
 
