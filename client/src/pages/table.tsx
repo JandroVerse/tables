@@ -63,7 +63,6 @@ export default function TablePage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(() => {
-    // Try to get existing sessionId from localStorage
     const storedSession = localStorage.getItem(`table_session_${tableId}`);
     if (storedSession) {
       try {
@@ -83,17 +82,23 @@ export default function TablePage() {
   const [waterCount, setWaterCount] = useState(1);
   const [isValidating, setIsValidating] = useState(true);
   const [isValid, setIsValid] = useState(false);
+  const [tableData, setTableData] = useState<any>(null);
 
-  // Verify the table exists first
+  // Verify the table exists and fetch table data
   useEffect(() => {
     if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
-      fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.valid) {
+      Promise.all([
+        fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`),
+        fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`)
+      ])
+        .then(async ([verifyRes, tableRes]) => {
+          const verifyData = await verifyRes.json();
+          const tableData = await tableRes.json();
+
+          if (verifyData.valid) {
             setIsValid(true);
+            setTableData(tableData);
             if (!sessionId) {
-              // Only create a new session if we don't have a valid one
               return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
             }
             return new Response(JSON.stringify({ sessionId }));
@@ -103,7 +108,6 @@ export default function TablePage() {
         .then((res) => res.json())
         .then((session) => {
           setSessionId(session.sessionId);
-          // Store session in localStorage with 24-hour expiry
           localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
             id: session.sessionId,
             expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
@@ -291,8 +295,11 @@ export default function TablePage() {
         <Card className="max-w-md mx-auto shadow-lg border-0">
           <CardHeader className="pb-4">
             <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
-              How can we help you?
+              {tableData ? `Table ${tableData.name}` : 'Loading...'}
             </CardTitle>
+             <div className="text-center text-sm text-muted-foreground">
+              How can we help you?
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
