@@ -143,9 +143,22 @@ export default function TablePage() {
 
     const unsubscribe = wsService.subscribe((data) => {
       console.log('Table page: Received WebSocket event', data);
-      if (data.type === "new_request" || data.type === "update_request") {
-        console.log('Table page: Invalidating requests query due to WebSocket event');
-        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+
+      switch (data.type) {
+        case 'new_request':
+        case 'update_request':
+          console.log('Table page: Invalidating requests query due to WebSocket event', data);
+          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+          break;
+        case 'connection_status':
+          console.log('Table page: WebSocket connection status:', data.status);
+          if (data.status === 'connected') {
+            // Refresh data when reconnected
+            queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+          }
+          break;
+        default:
+          console.log('Table page: Unknown WebSocket event type:', data.type);
       }
     });
 
@@ -220,11 +233,13 @@ export default function TablePage() {
         title: "Request sent",
         description: "Staff has been notified of your request.",
       });
-      // Notify through WebSocket
+
+      // Send WebSocket notification with full request data
       wsService.send({
         type: "new_request",
         tableId,
         restaurantId,
+        request: data
       });
     },
     onError: (error: Error) => {
