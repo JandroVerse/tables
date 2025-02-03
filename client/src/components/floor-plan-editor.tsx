@@ -279,11 +279,12 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
     },
   });
 
-    const { mutate: createTable } = useMutation({
+  const { mutate: createTable } = useMutation({
     mutationFn: async ({ name, position }: { name: string; position: TablePosition }) => {
       const res = await apiRequest("POST", `/api/restaurants/${restaurantId}/tables`, { name, position });
       if (!res.ok) {
-        throw new Error("Failed to create table");
+        const errorText = await res.text();
+        throw new Error(errorText || "Failed to create table");
       }
       return res.json();
     },
@@ -295,7 +296,8 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
       });
       setNewTableName("");
     },
-    onError: (error) => {
+    onError: (error: Error) => {
+      console.error('Table creation error:', error);
       toast({
         title: "Error",
         description: error.message,

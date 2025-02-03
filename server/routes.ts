@@ -111,7 +111,7 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // Generate QR code URL using current domain
+      // Get the domain, with fallback and logging
       const domain = process.env.REPLIT_DOMAINS?.split(",")[0] || req.get('host');
       console.log('Using domain for QR:', domain);
 
