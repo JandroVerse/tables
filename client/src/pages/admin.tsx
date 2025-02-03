@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { useForm } from "react-hook-form";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,9 +38,16 @@ const columnVariants = {
   exit: { opacity: 0, y: -20 }
 };
 
+interface CreateRestaurantForm {
+  name: string;
+  address?: string;
+  phone?: string;
+}
+
 export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const form = useForm<CreateRestaurantForm>();
 
   useEffect(() => {
     wsService.connect();
@@ -49,7 +59,7 @@ export default function AdminPage() {
     return () => unsubscribe();
   }, []);
 
-  const { data: restaurants = [] } = useQuery<Restaurant[]>({
+  const { data: restaurants = [], isLoading: isLoadingRestaurants } = useQuery<Restaurant[]>({
     queryKey: ["/api/restaurants"],
   });
 
@@ -59,6 +69,28 @@ export default function AdminPage() {
 
   const { data: tables = [] } = useQuery<Table[]>({
     queryKey: ["/api/tables"],
+  });
+
+  const { mutate: createRestaurant } = useMutation({
+    mutationFn: async (data: CreateRestaurantForm) => {
+      return apiRequest("POST", "/api/restaurants", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/restaurants"] });
+      toast({
+        title: "Restaurant created",
+        description: "Your restaurant has been created successfully.",
+      });
+      form.reset();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to create restaurant. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Failed to create restaurant:", error);
+    },
   });
 
   const { mutate: updateRequest } = useMutation({
@@ -117,6 +149,10 @@ export default function AdminPage() {
       });
   };
 
+  const onSubmit = (data: CreateRestaurantForm) => {
+    createRestaurant(data);
+  };
+
   return (
     <div className="min-h-screen">
       <div className="relative z-0">
@@ -141,10 +177,51 @@ export default function AdminPage() {
           <FloorPlanEditor restaurantId={currentRestaurant.id} />
         ) : (
           <Card>
-            <CardContent className="p-6">
-              <p className="text-center text-muted-foreground">
-                Please create a restaurant first to manage tables
-              </p>
+            <CardHeader>
+              <CardTitle>Create Your Restaurant</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Restaurant Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter restaurant name" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Address (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter address" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter phone number" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit">Create Restaurant</Button>
+                </form>
+              </Form>
             </CardContent>
           </Card>
         )}
