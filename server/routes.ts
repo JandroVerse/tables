@@ -8,70 +8,30 @@ import QRCode from "qrcode";
 import { nanoid } from "nanoid";
 import { setupAuth } from "./auth";
 
-// Keep track of WebSocket clients by session and restaurant
+// Keep track of WebSocket clients by session
 const clientsBySession = new Map<string, Set<WebSocket>>();
-const clientsByRestaurant = new Map<number, Set<WebSocket>>();
 
 // Keep track of client types
 const clientTypes = new Map<WebSocket, { 
   type: 'customer' | 'admin';
-  restaurantId?: number;
   sessionId: string;
 }>();
 
-function broadcastToRestaurant(restaurantId: number, message: any) {
-  console.log(`Broadcasting to restaurant ${restaurantId}:`, message);
-  const clients = clientsByRestaurant.get(restaurantId);
+function broadcastToSession(sessionId: string, message: any, excludeClient?: WebSocket) {
+  console.log(`Broadcasting to session ${sessionId}:`, message);
+  const clients = clientsBySession.get(sessionId);
   if (clients) {
     const messageStr = JSON.stringify(message);
-    console.log(`Found ${clients.size} clients for restaurant ${restaurantId}`);
+    console.log(`Found ${clients.size} clients for session ${sessionId}`);
     clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
+      if (client !== excludeClient && client.readyState === WebSocket.OPEN) {
         console.log('Sending to client with type:', clientTypes.get(client)?.type);
         client.send(messageStr);
       }
     });
   } else {
-    console.log(`No clients found for restaurant ${restaurantId}`);
+    console.log(`No clients found for session ${sessionId}`);
   }
-}
-
-async function verifyTableAccess(restaurantId: number, tableId: number) {
-  const [table] = await db.query.tables.findMany({
-    where: and(
-      eq(tables.id, tableId),
-      eq(tables.restaurantId, restaurantId)
-    ),
-    with: {
-      restaurant: true
-    }
-  });
-
-  if (!table) {
-    throw new Error(`Table ${tableId} not found in restaurant ${restaurantId}`);
-  }
-
-  return table;
-}
-
-async function getActiveTableSession(tableId: number) {
-  const [activeSession] = await db
-    .select()
-    .from(tableSessions)
-    .where(and(
-      eq(tableSessions.tableId, tableId),
-      eq(tableSessions.endedAt, null)
-    ))
-    .limit(1);
-
-  return activeSession;
-}
-
-function ensureAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  res.status(401).json({ message: "Not authenticated" });
 }
 
 export function registerRoutes(app: Express): Server {
@@ -86,12 +46,10 @@ export function registerRoutes(app: Express): Server {
       const url = new URL(req.url!, `http://${req.headers.host}`);
       const sessionId = url.searchParams.get('sessionId');
       const clientType = url.searchParams.get('clientType');
-      const restaurantId = url.searchParams.get('restaurantId');
 
       console.log('WebSocket connection request:', {
         sessionId,
-        clientType,
-        restaurantId
+        clientType
       });
 
       if (!sessionId || !clientType) {
@@ -102,7 +60,6 @@ export function registerRoutes(app: Express): Server {
       // Store parameters in request for use in connection handler
       (req as any).sessionId = sessionId;
       (req as any).clientType = clientType;
-      (req as any).restaurantId = restaurantId ? Number(restaurantId) : undefined;
 
       return true;
     }
@@ -119,12 +76,11 @@ export function registerRoutes(app: Express): Server {
 
   // WebSocket setup section
   wss.on("connection", (ws: WebSocket, req: any) => {
-    const { sessionId, clientType, restaurantId } = req;
+    const { sessionId, clientType } = req;
 
     console.log("WebSocket: New connection:", {
       sessionId,
-      clientType,
-      restaurantId
+      clientType
     });
 
     // Add client to session group
@@ -133,18 +89,9 @@ export function registerRoutes(app: Express): Server {
     }
     clientsBySession.get(sessionId)!.add(ws);
 
-    // If it's an admin client and restaurantId is provided, add to restaurant group
-    if (clientType === 'admin' && restaurantId) {
-      if (!clientsByRestaurant.has(restaurantId)) {
-        clientsByRestaurant.set(restaurantId, new Set());
-      }
-      clientsByRestaurant.get(restaurantId)!.add(ws);
-    }
-
     // Store client info
     clientTypes.set(ws, {
       type: clientType,
-      restaurantId: restaurantId,
       sessionId
     });
 
@@ -159,22 +106,8 @@ export function registerRoutes(app: Express): Server {
           return;
         }
 
-        // Handle broadcasting based on message type and client type
-        if (data.broadcast && data.restaurantId) {
-          console.log('Broadcasting message to restaurant:', data.restaurantId);
-          broadcastToRestaurant(data.restaurantId, data);
-        } else {
-          // Only broadcast to clients in the same session
-          const sessionClients = clientsBySession.get(sessionId);
-          if (sessionClients) {
-            console.log(`Broadcasting to ${sessionClients.size} session clients`);
-            sessionClients.forEach((client) => {
-              if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(message);
-              }
-            });
-          }
-        }
+        // Broadcast to all clients in the same session
+        broadcastToSession(sessionId, data, ws);
       } catch (error) {
         console.error("WebSocket: Failed to process message:", error);
       }
@@ -183,8 +116,7 @@ export function registerRoutes(app: Express): Server {
     ws.on("close", () => {
       console.log("WebSocket: Client disconnected:", {
         sessionId,
-        clientType,
-        restaurantId
+        clientType
       });
 
       // Remove from session group
@@ -193,17 +125,6 @@ export function registerRoutes(app: Express): Server {
         sessionClients.delete(ws);
         if (sessionClients.size === 0) {
           clientsBySession.delete(sessionId);
-        }
-      }
-
-      // Remove from restaurant group if applicable
-      if (restaurantId) {
-        const restaurantClients = clientsByRestaurant.get(restaurantId);
-        if (restaurantClients) {
-          restaurantClients.delete(ws);
-          if (restaurantClients.size === 0) {
-            clientsByRestaurant.delete(restaurantId);
-          }
         }
       }
 
@@ -388,14 +309,11 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Broadcast the update to all connected clients
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: "update_table",
-            table: updatedTable
-          }));
-        }
+      broadcastToSession(req.body.sessionId, {
+        type: "update_table",
+        table: updatedTable
       });
+
 
       res.json(updatedTable);
     } catch (error) {
@@ -431,14 +349,10 @@ export function registerRoutes(app: Express): Server {
       return res.status(404).json({ message: "Table not found" });
     }
 
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: "delete_table",
-          tableId,
-          restaurantId
-        }));
-      }
+    broadcastToSession(req.body.sessionId, {
+      type: "delete_table",
+      tableId,
+      restaurantId
     });
 
     res.json(deletedTable);
@@ -591,11 +505,7 @@ export function registerRoutes(app: Express): Server {
       console.log(`Created request ${request.id} for table ${tableId}`);
 
       // Broadcast to WebSocket clients
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: "new_request", request }));
-        }
-      });
+      broadcastToSession(sessionId, { type: "new_request", request });
 
       res.json(request);
     } catch (error) {
@@ -609,7 +519,7 @@ export function registerRoutes(app: Express): Server {
 
   app.patch("/api/requests/:id", async (req, res) => {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, sessionId } = req.body;
 
     const [request] = await db
       .update(requests)
@@ -620,11 +530,7 @@ export function registerRoutes(app: Express): Server {
       .where(eq(requests.id, Number(id)))
       .returning();
 
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "update_request", request }));
-      }
-    });
+    broadcastToSession(sessionId, { type: "update_request", request });
 
     res.json(request);
   });
@@ -665,13 +571,9 @@ export function registerRoutes(app: Express): Server {
       })
       .returning();
 
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: "new_feedback",
-          feedback: newFeedback
-        }));
-      }
+    broadcastToSession(request.sessionId, {
+      type: "new_feedback",
+      feedback: newFeedback
     });
 
     res.json(newFeedback);
@@ -688,4 +590,42 @@ export function registerRoutes(app: Express): Server {
   });
 
   return httpServer;
+}
+
+async function verifyTableAccess(restaurantId: number, tableId: number) {
+  const [table] = await db.query.tables.findMany({
+    where: and(
+      eq(tables.id, tableId),
+      eq(tables.restaurantId, restaurantId)
+    ),
+    with: {
+      restaurant: true
+    }
+  });
+
+  if (!table) {
+    throw new Error(`Table ${tableId} not found in restaurant ${restaurantId}`);
+  }
+
+  return table;
+}
+
+async function getActiveTableSession(tableId: number) {
+  const [activeSession] = await db
+    .select()
+    .from(tableSessions)
+    .where(and(
+      eq(tableSessions.tableId, tableId),
+      eq(tableSessions.endedAt, null)
+    ))
+    .limit(1);
+
+  return activeSession;
+}
+
+function ensureAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ message: "Not authenticated" });
 }
