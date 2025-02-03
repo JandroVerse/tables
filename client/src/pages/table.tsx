@@ -79,82 +79,85 @@ export default function TablePage() {
       return;
     }
 
-    const storedSession = localStorage.getItem(`table_session_${tableId}`);
-    let existingSessionId = null;
-
-    if (storedSession) {
+    const initializeSession = async () => {
       try {
-        const session = JSON.parse(storedSession);
-        if (new Date(session.expiry) > new Date()) {
-          existingSessionId = session.id;
-          setSessionId(existingSessionId);
-          // Store session ID globally for WebSocket
-          localStorage.setItem('sessionId', session.id);
-        } else {
-          localStorage.removeItem(`table_session_${tableId}`);
-          localStorage.removeItem('sessionId');
-        }
-      } catch (e) {
-        localStorage.removeItem(`table_session_${tableId}`);
-        localStorage.removeItem('sessionId');
-      }
-    }
+        const storedSession = localStorage.getItem(`table_session_${tableId}`);
+        let existingSessionId = null;
 
-    console.log(`Validating table ${tableId} for restaurant ${restaurantId}`);
-
-    fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`, {
-      headers: {
-        'X-Session-ID': existingSessionId || ''
-      }
-    })
-      .then(async (res) => {
-        const text = await res.text();
-        console.log('Raw API response:', text);
-
-        if (!res.ok) {
-          throw new Error(text || "Invalid table");
+        if (storedSession) {
+          try {
+            const session = JSON.parse(storedSession);
+            if (new Date(session.expiry) > new Date()) {
+              existingSessionId = session.id;
+              localStorage.setItem('sessionId', session.id);
+            } else {
+              localStorage.removeItem(`table_session_${tableId}`);
+              localStorage.removeItem('sessionId');
+            }
+          } catch (e) {
+            localStorage.removeItem(`table_session_${tableId}`);
+            localStorage.removeItem('sessionId');
+          }
         }
 
-        const data = JSON.parse(text);
-        console.log('Parsed table data:', data);
+        console.log(`Validating table ${tableId} for restaurant ${restaurantId}`);
 
-        if (!data || data.restaurantId !== restaurantId) {
+        // First, validate the table
+        const tableResponse = await fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`, {
+          headers: {
+            ...(existingSessionId ? { 'X-Session-ID': existingSessionId } : {})
+          }
+        });
+
+        if (!tableResponse.ok) {
+          throw new Error(await tableResponse.text() || "Invalid table");
+        }
+
+        const tableInfo = await tableResponse.json();
+        if (!tableInfo || tableInfo.restaurantId !== restaurantId) {
           throw new Error("Table does not belong to this restaurant");
         }
 
-        setTableData(data);
+        setTableData(tableInfo);
         setIsValid(true);
 
+        // Then, get or create session
+        let sessionResponse;
         if (!existingSessionId) {
-          return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
+          sessionResponse = await fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/sessions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } else {
+          sessionResponse = new Response(JSON.stringify({ sessionId: existingSessionId }));
         }
-        return new Response(JSON.stringify({ sessionId: existingSessionId }));
-      })
-      .then((res) => res.json())
-      .then((session) => {
-        console.log('Session data:', session);
-        setSessionId(session.sessionId);
+
+        const sessionData = await sessionResponse.json();
+        console.log('Session data:', sessionData);
+
+        setSessionId(sessionData.sessionId);
         localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
-          id: session.sessionId,
+          id: sessionData.sessionId,
           expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         }));
-         // Store session ID globally for WebSocket
-        localStorage.setItem('sessionId', session.sessionId);
+        localStorage.setItem('sessionId', sessionData.sessionId);
+
         queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
-      })
-      .catch((error) => {
-        console.error("Failed to verify table or create session:", error);
+      } catch (error) {
+        console.error("Failed to initialize session:", error);
         toast({
           title: "Error",
-          description: error.message || "This table appears to be invalid or no longer exists.",
+          description: error.message || "Failed to initialize table session",
           variant: "destructive",
         });
         setIsValid(false);
-      })
-      .finally(() => {
+      } finally {
         setIsValidating(false);
-      });
-  }, [restaurantId, tableId]);
+      }
+    };
+
+    initializeSession();
+  }, [restaurantId, tableId, queryClient, toast]);
 
   useEffect(() => {
     wsService.connect();
@@ -191,7 +194,11 @@ export default function TablePage() {
     queryKey: ["/api/requests", tableId, restaurantId],
     queryFn: async () => {
       if (!sessionId) return [];
-      const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`);
+      const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`, {
+        headers: {
+          'X-Session-ID': sessionId
+        }
+      });
       if (!res.ok) throw new Error("Failed to fetch requests");
       const data = await res.json();
       return data.map((request: any) => ({
