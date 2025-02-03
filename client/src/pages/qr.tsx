@@ -69,10 +69,12 @@ export default function QRPage() {
               <Card key={table.id} className="overflow-hidden">
                 <CardContent className="p-4">
                   <h3 className="font-medium mb-2">{table.name}</h3>
-                  <div 
-                    className="w-full mb-4"
-                    dangerouslySetInnerHTML={{ __html: table.qrCode }}
-                  />
+                  {table.qrCode && (
+                    <div 
+                      className="w-full mb-4 p-4 bg-white rounded-lg shadow-sm"
+                      dangerouslySetInnerHTML={{ __html: table.qrCode }}
+                    />
+                  )}
                   <div className="space-y-2">
                     <Button
                       className="w-full"
