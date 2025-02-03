@@ -1,55 +1,33 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
-import { tables, requests, feedback, tableSessions, restaurants, users } from "@db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { tables, requests, feedback, tableSessions, restaurants } from "@db/schema";
+import { eq, and } from "drizzle-orm";
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
 import { setupAuth } from "./auth";
 
-// Modified verifyTableAccess function to support both token and session-based auth
-async function verifyTableAccess(params: { token?: string, tableId?: number, restaurantId?: number }) {
-  const { token, tableId, restaurantId } = params;
-
-  if (token) {
-    // Token-based verification
-    const [table] = await db.query.tables.findMany({
-      where: eq(tables.token, token),
-      with: {
-        restaurant: true
-      }
-    });
-
-    if (!table) {
-      throw new Error(`Invalid table token`);
+async function verifyTableAccess(restaurantId: number, tableId: number) {
+  const [table] = await db.query.tables.findMany({
+    where: and(
+      eq(tables.id, tableId),
+      eq(tables.restaurantId, restaurantId)
+    ),
+    with: {
+      restaurant: true
     }
+  });
 
-    return table;
-  } else if (tableId && restaurantId) {
-    // Session-based verification
-    const [table] = await db.query.tables.findMany({
-      where: and(
-        eq(tables.id, tableId),
-        eq(tables.restaurantId, restaurantId)
-      ),
-      with: {
-        restaurant: true
-      }
-    });
-
-    if (!table) {
-      throw new Error(`Table ${tableId} not found in restaurant ${restaurantId}`);
-    }
-
-    return table;
+  if (!table) {
+    throw new Error(`Table ${tableId} not found in restaurant ${restaurantId}`);
   }
 
-  throw new Error('Invalid authentication parameters');
+  return table;
 }
 
-function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
-  if (req.isAuthenticated() && req.user) {
+function ensureAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
+  if (req.isAuthenticated()) {
     return next();
   }
   res.status(401).json({ message: "Not authenticated" });
@@ -68,7 +46,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Add request logging middleware
-  app.use((req: Request, res: Response, next: NextFunction) => {
+  app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
   });
@@ -76,7 +54,7 @@ export function registerRoutes(app: Express): Server {
   // Setup authentication
   setupAuth(app);
 
-  // WebSocket setup
+  // WebSocket setup section
   wss.on("connection", (ws: WebSocket) => {
     console.log("New WebSocket connection");
     ws.on("message", (message: string) => {
@@ -95,16 +73,12 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Restaurant routes
-  app.post("/api/restaurants", ensureAuthenticated, async (req: Request, res: Response) => {
-    if (!req.user) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-
+  app.post("/api/restaurants", ensureAuthenticated, async (req, res) => {
     const { name, address, phone } = req.body;
     const [restaurant] = await db.insert(restaurants)
       .values({
         name,
-        ownerId: req.user.id,
+        ownerId: req.user!.id,
         address,
         phone,
       })
@@ -112,18 +86,14 @@ export function registerRoutes(app: Express): Server {
     res.json(restaurant);
   });
 
-  app.get("/api/restaurants", ensureAuthenticated, async (req: Request, res: Response) => {
-    if (!req.user) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-
+  app.get("/api/restaurants", ensureAuthenticated, async (req, res) => {
     const userRestaurants = await db.query.restaurants.findMany({
-      where: eq(restaurants.ownerId, req.user.id),
+      where: eq(restaurants.ownerId, req.user!.id),
     });
     res.json(userRestaurants);
   });
-  
-    app.get("/api/restaurants/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+
+  app.get("/api/restaurants/:id", ensureAuthenticated, async (req, res) => {
     const [restaurant] = await db.query.restaurants.findMany({
       where: and(
         eq(restaurants.id, Number(req.params.id)),
@@ -139,7 +109,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Table routes - all within restaurant context
-  app.get("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req, res) => {
     const { restaurantId } = req.params;
     const allTables = await db.query.tables.findMany({
       where: eq(tables.restaurantId, Number(restaurantId)),
@@ -148,7 +118,7 @@ export function registerRoutes(app: Express): Server {
     res.json(allTables);
   });
 
-  app.post("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req, res) => {
     const { restaurantId } = req.params;
     const { name, position } = req.body;
 
@@ -189,7 +159,6 @@ export function registerRoutes(app: Express): Server {
           restaurantId: Number(restaurantId),
           qrCode: '', // Temporary empty QR code
           position,
-          token: nanoid(),
         })
         .returning();
 
@@ -226,25 +195,24 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Failed to create table or generate QR code", error: String(error) });
     }
   });
-  
-  // Modify table verification endpoint
-  app.get("/api/tables/:token", async (req: Request, res: Response) => {
-    const { token } = req.params;
+
+  // Add specific endpoint to verify table exists
+  app.get("/api/restaurants/:restaurantId/tables/:tableId", async (req, res) => {
+    const { restaurantId, tableId } = req.params;
 
     try {
-      console.log(`Verifying access for table with token ${token}`);
-      const table = await verifyTableAccess({ token });
+      console.log(`Verifying access for table ${tableId} in restaurant ${restaurantId}`);
+      const table = await verifyTableAccess(Number(restaurantId), Number(tableId));
       res.json(table);
     } catch (error) {
       console.error('Error verifying table:', error);
       res.status(404).json({ 
-        message: error instanceof Error ? error.message : "Invalid table token"
+        message: error instanceof Error ? error.message : "Table not found or invalid restaurant"
       });
     }
   });
 
-
-  app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
     const { restaurantId, tableId } = req.params;
     const { position } = req.body;
 
@@ -296,7 +264,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.delete("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.delete("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
     const { restaurantId, tableId } = req.params;
 
     // Verify restaurant ownership
@@ -335,9 +303,9 @@ export function registerRoutes(app: Express): Server {
 
     res.json(deletedTable);
   });
-  
+
   // Session management
-  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req: Request, res: Response) => {
+  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req, res) => {
     const { restaurantId, tableId } = req.params;
     const sessionId = nanoid();
 
@@ -345,17 +313,14 @@ export function registerRoutes(app: Express): Server {
       console.log(`Creating session for table ${tableId} in restaurant ${restaurantId}`);
 
       // Verify the table belongs to the restaurant
-      const table = await verifyTableAccess({ 
-        tableId: Number(tableId), 
-        restaurantId: Number(restaurantId) 
-      });
+      const table = await verifyTableAccess(Number(restaurantId), Number(tableId));
 
       // Close any existing active sessions for this table
       await db.update(tableSessions)
         .set({ endedAt: new Date() })
         .where(and(
           eq(tableSessions.tableId, Number(tableId)),
-          isNull(tableSessions.endedAt)
+          eq(tableSessions.endedAt, null)
         ));
 
       // Create new session
@@ -383,44 +348,100 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add request endpoint with token auth
-  app.post("/api/requests", async (req: Request, res: Response) => {
-    const { token, tableId, restaurantId, sessionId, type, notes } = req.body;
+  // Request routes
+  app.get("/api/requests", async (req, res) => {
+    const { tableId, restaurantId, sessionId } = req.query;
+    console.log(`Fetching requests for table ${tableId} in restaurant ${restaurantId}, session ${sessionId}`);
 
-    if ((!token && (!tableId || !restaurantId || !sessionId)) || !type) {
+    try {
+      // Validate parameters
+      const parsedTableId = tableId ? parseInt(tableId as string) : null;
+      const parsedRestaurantId = restaurantId ? parseInt(restaurantId as string) : null;
+
+      if (!parsedTableId || isNaN(parsedTableId) || !parsedRestaurantId || isNaN(parsedRestaurantId) || !sessionId) {
+        console.log('Invalid parameters:', { tableId, restaurantId, sessionId });
+        return res.status(400).json({ message: "Invalid parameters" });
+      }
+
+      // First verify the table belongs to the restaurant
+      const [table] = await db.query.tables.findMany({
+        where: and(
+          eq(tables.id, parsedTableId),
+          eq(tables.restaurantId, parsedRestaurantId)
+        ),
+      });
+
+      if (!table) {
+        console.log(`Table ${parsedTableId} not found in restaurant ${parsedRestaurantId}`);
+        return res.status(404).json({ message: "Table not found in this restaurant" });
+      }
+
+      // Now get requests for this table and session
+      const allRequests = await db.query.requests.findMany({
+        where: and(
+          eq(requests.tableId, parsedTableId),
+          eq(requests.sessionId, sessionId as string)
+        ),
+        with: {
+          table: true
+        }
+      });
+
+      console.log(`Found ${allRequests.length} requests for table ${parsedTableId}`);
+      res.json(allRequests);
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+      res.status(500).json({ message: "Failed to fetch requests" });
+    }
+  });
+
+  app.post("/api/requests", async (req, res) => {
+    const { tableId, restaurantId, sessionId, type, notes } = req.body;
+    console.log('Received request creation:', {
+      tableId,
+      restaurantId,
+      sessionId,
+      type,
+      notes
+    });
+
+    if (!tableId || !restaurantId || !sessionId || !type) {
+      console.error('Missing required fields:', { tableId, restaurantId, sessionId, type });
       return res.status(400).json({ message: "Missing required fields" });
     }
 
     try {
-      // Verify table access using either method
-      const table = await verifyTableAccess({ 
-        token, 
-        tableId: tableId ? Number(tableId) : undefined,
-        restaurantId: restaurantId ? Number(restaurantId) : undefined
+      // Verify the table belongs to the specified restaurant
+      const [table] = await db.query.tables.findMany({
+        where: and(
+          eq(tables.id, Number(tableId)),
+          eq(tables.restaurantId, Number(restaurantId))
+        ),
       });
+
+      if (!table) {
+        console.log(`Table ${tableId} not found in restaurant ${restaurantId}`);
+        return res.status(404).json({ message: "Table not found in this restaurant" });
+      }
+
+      console.log(`Verified table ${tableId} belongs to restaurant ${restaurantId}`);
 
       // Create the request
       const [request] = await db.insert(requests)
         .values({
-          tableId: table.id,
-          sessionId: sessionId || 'token-auth', // Use placeholder for token-based auth
+          tableId: Number(tableId),
+          sessionId,
           type,
           notes,
         })
         .returning();
 
-      console.log(`Created request ${request.id} for table ${table.id}`);
+      console.log(`Created request ${request.id} for table ${tableId}`);
 
       // Broadcast to WebSocket clients
       wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ 
-            type: "new_request", 
-            request,
-            token,
-            tableId: table.id,
-            restaurantId: table.restaurantId
-          }));
+          client.send(JSON.stringify({ type: "new_request", request }));
         }
       });
 
@@ -434,38 +455,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.get("/api/requests", async (req: Request, res: Response) => {
-    const { token, tableId, restaurantId, sessionId } = req.query;
-
-    try {
-      // Validate and get table using either auth method
-      const table = await verifyTableAccess({ 
-        token: token as string, 
-        tableId: tableId ? Number(tableId) : undefined,
-        restaurantId: restaurantId ? Number(restaurantId) : undefined
-      });
-
-      // Get requests for this table
-      const allRequests = await db.query.requests.findMany({
-        where: and(
-          eq(requests.tableId, table.id),
-          token ? undefined : eq(requests.sessionId, sessionId as string)
-        ),
-        with: {
-          table: true
-        }
-      });
-
-      console.log(`Found ${allRequests.length} requests for table ${table.id}`);
-      res.json(allRequests);
-    } catch (error) {
-      console.error('Error fetching requests:', error);
-      res.status(500).json({ message: "Failed to fetch requests" });
-    }
-  });
-  
-
-  app.patch("/api/requests/:id", async (req: Request, res: Response) => {
+  app.patch("/api/requests/:id", async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
@@ -488,7 +478,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Feedback routes
-  app.post("/api/feedback", async (req: Request, res: Response) => {
+  app.post("/api/feedback", async (req, res) => {
     const { requestId, rating, comment } = req.body;
 
     const request = await db.query.requests.findFirst({
@@ -534,8 +524,8 @@ export function registerRoutes(app: Express): Server {
 
     res.json(newFeedback);
   });
-  
-  app.get("/api/feedback", async (req: Request, res: Response) => {
+
+  app.get("/api/feedback", async (req, res) => {
     const { requestId } = req.query;
     const query = requestId
       ? { where: eq(feedback.requestId, Number(requestId)) }

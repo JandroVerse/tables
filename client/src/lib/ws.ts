@@ -4,7 +4,6 @@ interface WebSocketMessage {
   type: 'new_request' | 'update_request' | 'connection_status';
   tableId?: number;
   restaurantId?: number;
-  token?: string;
   request?: any;
   status?: 'connected' | 'disconnected' | 'reconnecting';
 }
@@ -16,7 +15,6 @@ class WebSocketService {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private isConnected = false;
-  private connectionTimeout: number | null = null;
 
   connect() {
     if (this.ws?.readyState === WebSocket.OPEN) {
@@ -24,120 +22,76 @@ class WebSocketService {
       return;
     }
 
-    if (this.connectionTimeout) {
-      console.log('WebSocket: Clearing existing connection timeout');
-      clearTimeout(this.connectionTimeout);
-    }
-
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-
-    // Support both authentication methods
     const sessionId = localStorage.getItem('sessionId');
-    const tableToken = localStorage.getItem('tableToken');
-    const authQuery = tableToken 
-      ? `?token=${tableToken}`
-      : sessionId 
-      ? `?sessionId=${sessionId}` 
-      : '';
 
-    console.log('WebSocket: Attempting to connect to', `${protocol}//${host}/ws${authQuery}`);
+    console.log('WebSocket: Attempting to connect to', `${protocol}//${host}/ws`);
 
-    try {
-      this.ws = new WebSocket(`${protocol}//${host}/ws${authQuery}`);
+    // Include session ID in the WebSocket URL
+    this.ws = new WebSocket(`${protocol}//${host}/ws${sessionId ? `?sessionId=${sessionId}` : ''}`);
 
-      // Set connection timeout
-      this.connectionTimeout = window.setTimeout(() => {
-        console.log('WebSocket: Connection attempt timed out');
-        if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
-          this.ws.close();
-          this.handleConnectionFailure();
-        }
-      }, 5000) as unknown as number;
-
-      this.ws.onopen = () => {
-        console.log('WebSocket: Connection established');
-        if (this.connectionTimeout) {
-          clearTimeout(this.connectionTimeout);
-          this.connectionTimeout = null;
-        }
-        this.isConnected = true;
-        this.reconnectAttempts = 0;
-        this.notifyListeners({
-          type: 'connection_status',
-          status: 'connected'
-        });
-      };
-
-      this.ws.onmessage = (event) => {
-        console.log('WebSocket: Received message', event.data);
-        try {
-          const data = JSON.parse(event.data);
-          this.listeners.forEach(listener => listener(data));
-        } catch (error) {
-          console.error('WebSocket: Error parsing message', error);
-        }
-      };
-
-      this.ws.onclose = (event) => {
-        console.log('WebSocket: Connection closed', event.code, event.reason);
-        this.isConnected = false;
-        this.notifyListeners({
-          type: 'connection_status',
-          status: 'disconnected'
-        });
-        this.handleConnectionFailure();
-      };
-
-      this.ws.onerror = (error) => {
-        console.error('WebSocket: Error occurred', error);
-        this.handleConnectionFailure();
-      };
-    } catch (error) {
-      console.error('WebSocket: Failed to create connection', error);
-      this.handleConnectionFailure();
-    }
-  }
-
-  private handleConnectionFailure() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      console.log(`WebSocket: Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    this.ws.onopen = () => {
+      console.log('WebSocket: Connection established');
+      this.isConnected = true;
+      this.reconnectAttempts = 0;
       this.notifyListeners({
         type: 'connection_status',
-        status: 'reconnecting'
+        status: 'connected'
       });
-      setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);
-    } else {
-      console.error('WebSocket: Max reconnection attempts reached');
-    }
+    };
+
+    this.ws.onmessage = (event) => {
+      console.log('WebSocket: Received message', event.data);
+      try {
+        const data = JSON.parse(event.data);
+        this.listeners.forEach(listener => listener(data));
+      } catch (error) {
+        console.error('WebSocket: Error parsing message', error);
+      }
+    };
+
+    this.ws.onclose = () => {
+      console.log('WebSocket: Connection closed');
+      this.isConnected = false;
+      this.notifyListeners({
+        type: 'connection_status',
+        status: 'disconnected'
+      });
+
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        console.log(`WebSocket: Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+        this.notifyListeners({
+          type: 'connection_status',
+          status: 'reconnecting'
+        });
+        this.reconnectAttempts++;
+        setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);
+      } else {
+        console.error('WebSocket: Max reconnection attempts reached');
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('WebSocket: Error occurred', error);
+    };
   }
 
   send(message: WebSocketMessage) {
-    // Ensure we have either token or table/restaurant IDs
-    if ((!message.token && (!message.tableId || !message.restaurantId))) {
+    if (!message.tableId || !message.restaurantId) {
       console.error('WebSocket: Invalid message - missing required parameters', message);
       return;
     }
 
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('WebSocket: Sending message', message);
-
-      // Include auth info in message payload
+      // Include session ID in the message payload
       const sessionId = localStorage.getItem('sessionId');
-      const tableToken = localStorage.getItem('tableToken');
-
-      const messageWithAuth = {
+      const messageWithSession = {
         ...message,
-        sessionId,
-        token: tableToken || message.token
+        sessionId
       };
-
-      try {
-        this.ws.send(JSON.stringify(messageWithAuth));
-      } catch (error) {
-        console.error('WebSocket: Error sending message', error);
-      }
+      this.ws.send(JSON.stringify(messageWithSession));
     } else {
       console.error('WebSocket: Cannot send message - connection not open', {
         readyState: this.ws?.readyState,

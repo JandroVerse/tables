@@ -36,7 +36,6 @@ export const tables = pgTable("tables", {
   restaurantId: integer("restaurant_id").references(() => restaurants.id).notNull(),
   name: text("name").notNull(),
   qrCode: text("qr_code").notNull(),
-  token: text("token").notNull().unique(),
   position: jsonb("position").default({
     x: 0,
     y: 0,
