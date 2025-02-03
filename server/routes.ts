@@ -127,8 +127,8 @@ export function registerRoutes(app: Express): Server {
 
       console.log('Created table:', table.id);
 
-      // Generate QR code with full URL
-      const tableUrl = `https://${domain}/table/${restaurantId}/${table.id}`;
+      // Generate QR code with full URL - updated to point to the request page
+      const tableUrl = `https://${domain}/request/${restaurantId}/${table.id}`;
       console.log('Generating QR code for URL:', tableUrl);
 
       const qrCodeSvg = await QRCode.toString(tableUrl, { 

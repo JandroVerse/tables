@@ -16,7 +16,7 @@ function Router() {
       <Route path="/">
         <Redirect to="/admin" />
       </Route>
-      <Route path="/table/:restaurantId/:tableId" component={TablePage} />
+      <Route path="/request/:restaurantId/:tableId" component={TablePage} />
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/admin" component={AdminPage} />
       <ProtectedRoute path="/qr" component={QRPage} />
