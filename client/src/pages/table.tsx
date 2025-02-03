@@ -86,13 +86,24 @@ export default function TablePage() {
 
   useEffect(() => {
     if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
-      console.log(`Fetching table ${tableId} for restaurant ${restaurantId}`);
+      console.log(`Attempting to fetch table ${tableId} for restaurant ${restaurantId}`);
 
       fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`)
         .then(async (res) => {
-          if (!res.ok) throw new Error("Invalid table");
-          const data = await res.json();
-          console.log('Raw table data received:', data);
+          const text = await res.text();
+          console.log('Raw API response:', text);
+
+          if (!res.ok) {
+            throw new Error(text || "Invalid table");
+          }
+
+          const data = JSON.parse(text);
+          console.log('Parsed table data:', data);
+
+          if (!data || data.restaurantId !== restaurantId) {
+            throw new Error("Table does not belong to this restaurant");
+          }
+
           setTableData(data);
           setIsValid(true);
 
@@ -115,7 +126,7 @@ export default function TablePage() {
           console.error("Failed to verify table or create session:", error);
           toast({
             title: "Error",
-            description: "This table appears to be invalid or no longer exists.",
+            description: error.message || "This table appears to be invalid or no longer exists.",
             variant: "destructive",
           });
         })
