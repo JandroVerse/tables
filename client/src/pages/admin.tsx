@@ -25,7 +25,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
 import { AnimatedBackground } from "@/components/animated-background";
-import { Navbar } from "@/components/ui/navbar";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -120,7 +119,6 @@ export default function AdminPage() {
     },
   });
 
-  // Helper function to get table name
   const getTableName = (tableId: number) => {
     const table = tables.find(t => t.id === tableId);
     return table ? table.name : `Table ${tableId}`;
@@ -133,7 +131,6 @@ export default function AdminPage() {
     completed: "Completed",
   };
 
-  // Get the first restaurant for now (we can add restaurant switching later)
   const currentRestaurant = restaurants[0];
 
   const getSortedRequests = (status: string) => {
@@ -141,10 +138,8 @@ export default function AdminPage() {
       .filter((r) => r.status === status)
       .sort((a, b) => {
         if (status === "completed") {
-          // For completed requests, sort by completedAt in descending order (newest first)
           return new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime();
         } else {
-          // For other statuses, sort by createdAt in ascending order (oldest first)
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         }
       });
@@ -156,7 +151,6 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen">
-      <Navbar />
       <div className="relative z-0">
         <AnimatedBackground />
       </div>
