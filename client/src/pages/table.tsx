@@ -34,7 +34,7 @@ import { AnimatedBackground } from "@/components/animated-background";
 import { useParams } from "wouter";
 
 interface RequestWithTable extends Request {
-  table: Table;
+  table?: Table;  // Make table optional since it might not be loaded yet
 }
 
 const cardVariants = {
@@ -561,7 +561,7 @@ export default function TablePage() {
                                   <motion.div
                                     className="text-sm"
                                     variants={statusVariants}
-                                    animate={request.status}
+                                    animate={request.status as keyof typeof statusVariants}
                                     transition={{ duration: 0.3 }}
                                   >
                                     Status:{" "}
@@ -570,7 +570,7 @@ export default function TablePage() {
                                        request.status === "pending" ? "Pending" :
                                        request.status === "completed" ? "Completed" :
                                        request.status === "cleared" ? "Cancelled" :
-                                       request.status.replace("_", " ")}
+                                       request.status}
                                     </span>
                                   </motion.div>
                                   {request.status === "pending" && (

@@ -122,7 +122,7 @@ export default function AdminPage() {
   // Helper function to get table name
   const getTableName = (tableId: number) => {
     const table = tables.find(t => t.id === tableId);
-    return table ? table.name : `Table ${tableId}`;
+    return table ? `Table ${table.name}` : `Table ${tableId}`;
   };
 
   const statuses = ["pending", "in_progress", "completed"] as const;
@@ -166,7 +166,7 @@ export default function AdminPage() {
       >
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">
-            {currentRestaurant 
+            {currentRestaurant
               ? `${currentRestaurant.name} Dashboard`
               : "Restaurant Admin Dashboard"}
           </h1>
@@ -270,11 +270,16 @@ export default function AdminPage() {
                               <CardContent className="flex items-center justify-between p-4">
                                 <div>
                                   <h3 className="font-medium">
-                                    {getTableName(request.tableId)} - {request.type}
+                                    {getTableName(request.tableId)} - {
+                                      request.type === "water" ? "Water Refill" :
+                                      request.type === "waiter" ? "Call Waiter" :
+                                      request.type === "check" ? "Get Check" :
+                                      request.type
+                                    }
                                   </h3>
                                   {request.notes && (
                                     <p className="text-sm text-gray-600 mt-1">
-                                      Request: {request.notes}
+                                      {request.notes}
                                     </p>
                                   )}
                                   <p className="text-sm text-gray-500">
