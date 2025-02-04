@@ -68,7 +68,7 @@ export default function TablePage() {
     const savedSession = localStorage.getItem(`table_session_${tableId}`);
     if (savedSession) {
       try {
-        const { sessionId, timestamp } = JSON.parse(savedSession);
+        const { sessionId, timestamp, isCreator } = JSON.parse(savedSession);
         // Check if the session is not expired (1 hour)
         if (Date.now() - timestamp < 60 * 60 * 1000) {
           return sessionId;
@@ -81,6 +81,21 @@ export default function TablePage() {
     }
     return null;
   });
+
+  // Modified to track if this user created the session
+  const [isSessionCreator, setIsSessionCreator] = useState<boolean>(() => {
+    const savedSession = localStorage.getItem(`table_session_${tableId}`);
+    if (savedSession) {
+      try {
+        const { isCreator } = JSON.parse(savedSession);
+        return !!isCreator;
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
+  });
+
   const [isWaterDialogOpen, setIsWaterDialogOpen] = useState(false);
   const [waterCount, setWaterCount] = useState(1);
   const [isValidating, setIsValidating] = useState(true);
@@ -100,9 +115,12 @@ export default function TablePage() {
           if (data.valid) {
             setIsValid(true);
             if (data.activeSession) {
-              // Show session prompt for existing session
-              setCurrentSessionId(data.activeSession.id);
-              setIsSessionPromptOpen(true);
+              // Only show session prompt if we don't have a valid stored session
+              // or if we're not the creator of this session
+              if (!sessionId || (data.activeSession.id !== sessionId && !isSessionCreator)) {
+                setCurrentSessionId(data.activeSession.id);
+                setIsSessionPromptOpen(true);
+              }
             } else if (data.requiresNewSession && !sessionId) {
               // Only create new session if we don't have a stored session
               return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
@@ -119,7 +137,8 @@ export default function TablePage() {
           if (session) {
             const sessionData = {
               sessionId: session.sessionId,
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              isCreator: true // Mark this user as the session creator
             };
             localStorage.setItem(
               `table_session_${tableId}`,
@@ -127,6 +146,7 @@ export default function TablePage() {
             );
             setCurrentSessionId(session.sessionId);
             setSessionId(session.sessionId);
+            setIsSessionCreator(true);
             queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
             toast({
               title: "Session Created",
@@ -202,7 +222,8 @@ export default function TablePage() {
 
     const sessionData = {
       sessionId: sessionInputValue,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      isCreator: false // This user joined an existing session
     };
     localStorage.setItem(
       `table_session_${tableId}`,
