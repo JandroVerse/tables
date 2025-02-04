@@ -1,21 +1,31 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
 import { tables, requests, feedback, tableSessions, restaurants } from "@db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
+import { customAlphabet } from 'nanoid';
 import { setupAuth } from "./auth";
 
-// Modified to properly type the next function
-function ensureAuthenticated(req: any, res: any, next: Function) {
+// Modified to properly type the next function and use regex for path matching
+function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
   // Allow unauthenticated access to table-related routes and WebSocket connections
-  if (
-    req.path.startsWith('/api/restaurants') &&
-    (req.path.includes('/tables/') || req.path.includes('/sessions')) ||
-    req.path === '/ws'
-  ) {
+  const publicPaths = [
+    '/api/restaurants/*/tables/*/verify',
+    '/api/restaurants/*/tables/*/sessions',
+    '/api/requests',
+    '/ws'
+  ];
+
+  // Check if the current path matches any of the public paths
+  const isPublicPath = publicPaths.some(pattern => {
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '[^/]+') + '$');
+    return regex.test(req.path);
+  });
+
+  if (isPublicPath) {
     return next();
   }
 
@@ -23,6 +33,17 @@ function ensureAuthenticated(req: any, res: any, next: Function) {
     return next();
   }
   res.status(401).json({ message: "Not authenticated" });
+}
+
+// Create a nanoid generator for 7-character alphanumeric IDs
+const generateSessionId = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 7);
+
+// Add type definition for session data
+declare module 'express-session' {
+  interface Session {
+    sessionId?: string;
+    tableId?: number;
+  }
 }
 
 export function registerRoutes(app: Express): Server {
@@ -39,7 +60,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Add request logging middleware
-  app.use((req, res, next) => {
+  app.use((req:Request, res:Response, next:NextFunction) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
   });
@@ -48,7 +69,7 @@ export function registerRoutes(app: Express): Server {
   setupAuth(app);
 
   // Restaurant routes
-  app.post("/api/restaurants", ensureAuthenticated, async (req, res) => {
+  app.post("/api/restaurants", ensureAuthenticated, async (req:Request, res:Response) => {
     const { name, address, phone } = req.body;
     const [restaurant] = await db.insert(restaurants)
       .values({
@@ -61,14 +82,14 @@ export function registerRoutes(app: Express): Server {
     res.json(restaurant);
   });
 
-  app.get("/api/restaurants", ensureAuthenticated, async (req, res) => {
+  app.get("/api/restaurants", ensureAuthenticated, async (req:Request, res:Response) => {
     const userRestaurants = await db.query.restaurants.findMany({
       where: eq(restaurants.ownerId, req.user!.id),
     });
     res.json(userRestaurants);
   });
 
-  app.get("/api/restaurants/:id", ensureAuthenticated, async (req, res) => {
+  app.get("/api/restaurants/:id", ensureAuthenticated, async (req:Request, res:Response) => {
     const [restaurant] = await db.query.restaurants.findMany({
       where: and(
         eq(restaurants.id, Number(req.params.id)),
@@ -84,7 +105,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Table routes - all within restaurant context
-  app.get("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req, res) => {
+  app.get("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req:Request, res:Response) => {
     const { restaurantId } = req.params;
     const allTables = await db.query.tables.findMany({
       where: eq(tables.restaurantId, Number(restaurantId)),
@@ -93,7 +114,7 @@ export function registerRoutes(app: Express): Server {
     res.json(allTables);
   });
 
-  app.post("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req, res) => {
+  app.post("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req:Request, res:Response) => {
     const { restaurantId } = req.params;
     const { name, position } = req.body;
 
@@ -165,7 +186,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Add specific endpoint to verify table exists
-  app.get("/api/restaurants/:restaurantId/tables/:tableId/verify", async (req, res) => {
+  app.get("/api/restaurants/:restaurantId/tables/:tableId/verify", async (req:Request, res:Response) => {
     const { restaurantId, tableId } = req.params;
 
     try {
@@ -184,7 +205,7 @@ export function registerRoutes(app: Express): Server {
       const activeSession = await db.query.tableSessions.findFirst({
         where: and(
           eq(tableSessions.tableId, Number(tableId)),
-          eq(tableSessions.endedAt, null)
+          isNull(tableSessions.endedAt)
         ),
       });
 
@@ -224,7 +245,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
+  app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req:Request, res:Response) => {
     const { restaurantId, tableId } = req.params;
     const { position } = req.body;
 
@@ -251,7 +272,7 @@ export function registerRoutes(app: Express): Server {
         .set({ position })
         .where(and(
           eq(tables.id, Number(tableId)),
-          eq(tables.restaurantId, Number(restaurantId))
+          eq(tableSessions.restaurantId, Number(restaurantId))
         ))
         .returning();
 
@@ -276,7 +297,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.delete("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
+  app.delete("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req:Request, res:Response) => {
     const { restaurantId, tableId } = req.params;
 
     // Verify restaurant ownership
@@ -317,9 +338,9 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Session management
-  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req, res) => {
+  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req:Request, res:Response) => {
     const { restaurantId, tableId } = req.params;
-    const sessionId = nanoid();
+    const sessionId = generateSessionId(); // Use the custom generator instead of nanoid()
 
     try {
       // Close any existing active sessions for this table
@@ -358,7 +379,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Add session validation middleware
-  const validateSession = async (req: any, res: any, next: Function) => {
+  const validateSession = async (req: Request, res: Response, next: NextFunction) => {
     const { sessionId } = req.body;
     const tableId = Number(req.params.tableId);
 
@@ -371,7 +392,7 @@ export function registerRoutes(app: Express): Server {
         where: and(
           eq(tableSessions.tableId, tableId),
           eq(tableSessions.sessionId, sessionId),
-          eq(tableSessions.endedAt, null)
+          isNull(tableSessions.endedAt)
         ),
       });
 
@@ -391,7 +412,9 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Session expired" });
       }
 
-      req.session = session;
+      // Store session data in req.session
+      req.session.sessionId = session.sessionId;
+      req.session.tableId = session.tableId;
       next();
     } catch (error) {
       console.error('Session validation error:', error);
@@ -400,32 +423,43 @@ export function registerRoutes(app: Express): Server {
   };
 
   // Add session validation to request endpoints
-  app.post("/api/requests", validateSession, async (req, res) => {
-    const { tableId, type, notes } = req.body;
-    const sessionId = req.session.sessionId;
+  app.post("/api/requests", validateSession, async (req:Request, res:Response) => {
+    const { type, notes } = req.body;
+    const { sessionId, tableId } = req.session;
 
-    const [request] = await db.insert(requests).values({
-      tableId,
-      sessionId,
-      type,
-      notes,
-    }).returning();
+    if (!sessionId || !tableId) {
+      return res.status(403).json({ message: "Invalid session" });
+    }
 
-    // Broadcast the new request to all connected clients
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: "new_request",
-          request,
-          tableId: request.tableId
-        }));
-      }
-    });
+    try {
+      const [request] = await db.insert(requests)
+        .values({
+          tableId,
+          sessionId,
+          type,
+          notes,
+        })
+        .returning();
 
-    res.json(request);
+      // Broadcast the new request to all connected clients
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "new_request",
+            request,
+            tableId: request.tableId
+          }));
+        }
+      });
+
+      res.json(request);
+    } catch (error) {
+      console.error('Error creating request:', error);
+      res.status(500).json({ message: "Failed to create request" });
+    }
   });
 
-  app.get("/api/requests", async (req, res) => {
+  app.get("/api/requests", async (req:Request, res:Response) => {
     const { tableId, sessionId } = req.query;
     let query = {};
 
@@ -459,7 +493,8 @@ export function registerRoutes(app: Express): Server {
   });
 
 
-  app.patch("/api/requests/:id", async (req, res) => {
+
+  app.patch("/api/requests/:id", async (req:Request, res:Response) => {
     const { id } = req.params;
     const { status } = req.body;
 
@@ -487,7 +522,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Feedback routes
-  app.post("/api/feedback", async (req, res) => {
+  app.post("/api/feedback", async (req:Request, res:Response) => {
     const { requestId, rating, comment } = req.body;
 
     const request = await db.query.requests.findFirst({
@@ -534,7 +569,7 @@ export function registerRoutes(app: Express): Server {
     res.json(newFeedback);
   });
 
-  app.get("/api/feedback", async (req, res) => {
+  app.get("/api/feedback", async (req:Request, res:Response) => {
     const { requestId } = req.query;
     const query = requestId
       ? { where: eq(feedback.requestId, Number(requestId)) }

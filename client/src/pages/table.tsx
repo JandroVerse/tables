@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Minus, GlassWater, Bell, Receipt, Clock } from "lucide-react";
+import { Plus, Minus, GlassWater, Bell, Receipt, Clock, Copy } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect, useState } from "react";
@@ -32,8 +32,6 @@ import { FeedbackDialog } from "@/components/feedback-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedBackground } from "@/components/animated-background";
 import { useParams } from "wouter";
-
-// Rest of the imports remain the same...
 
 const cardVariants = {
   initial: { opacity: 0, y: 20 },
@@ -233,6 +231,16 @@ export default function TablePage() {
     },
   });
 
+  const copySessionId = () => {
+    if (sessionId) {
+      navigator.clipboard.writeText(sessionId);
+      toast({
+        title: "Copied!",
+        description: "Session ID copied to clipboard",
+      });
+    }
+  };
+
   if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -362,6 +370,27 @@ export default function TablePage() {
         transition={{ duration: 0.5 }}
         className="relative z-10 p-4"
       >
+        {sessionId && (
+          <Card className="max-w-md mx-auto mb-4 bg-primary/5">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Session ID:</p>
+                  <p className="text-lg font-mono font-bold">{sessionId}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={copySessionId}
+                  className="h-8 w-8"
+                  title="Copy session ID"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         <Card className="max-w-md mx-auto shadow-lg border-0">
           <CardHeader className="pb-4">
             <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
