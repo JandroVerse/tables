@@ -632,31 +632,19 @@ export function registerRoutes(app: Express): Server {
     const { id } = req.params;
     const userId = Number(id);
 
-    // Don't allow users to delete themselves
-    if (userId === req.user!.id) {
-      return res.status(400).json({ message: "Cannot delete your own account" });
-    }
-
     // Only allow deletion if the current user is an admin
     if (!req.user!.isAdmin) {
       return res.status(403).json({ message: "Only admins can delete users" });
     }
 
     try {
-      // Check if user owns any restaurants
-      const userRestaurants = await db.query.restaurants.findMany({
-        where: eq(restaurants.ownerId, userId),
-      });
-
-      if (userRestaurants.length > 0) {
-        return res.status(400).json({ 
-          message: "Cannot delete user who owns restaurants. Please transfer or delete their restaurants first." 
-        });
-      }
-
       // Delete any staff assignments first
       await db.delete(restaurantStaff)
         .where(eq(restaurantStaff.userId, userId));
+
+      // Delete any owned restaurants
+      await db.delete(restaurants)
+        .where(eq(restaurants.ownerId, userId));
 
       const [deletedUser] = await db.delete(users)
         .where(eq(users.id, userId))
