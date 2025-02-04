@@ -98,6 +98,7 @@ export default function TablePage() {
   const [sessionError, setSessionError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessionTimeRemaining, setSessionTimeRemaining] = useState(60 * 60 * 1000);
+  const [isSessionEnded, setIsSessionEnded] = useState(false);
 
 
   const handleSessionSubmit = () => {
@@ -241,7 +242,10 @@ export default function TablePage() {
       } else if (data.type === "end_session" && data.tableId === tableId) {
         // Handle session end event
         localStorage.removeItem(`table_session_${tableId}`);
-        window.location.reload();
+        setIsSessionEnded(true);
+        setSessionId(null);
+        setCurrentSessionId(null);
+        setSessionTimeRemaining(0);
       }
     });
 
@@ -387,6 +391,31 @@ export default function TablePage() {
       console.error("Failed to end session:", error);
     },
   });
+
+  if (isSessionEnded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-[90%] max-w-md">
+          <CardHeader>
+            <CardTitle>Session Ended</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-6">
+              This table's session has been ended by staff. To start a new session, please scan the QR code again.
+            </p>
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => window.location.reload()}
+              >
+                Scan New QR Code
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
     return (
