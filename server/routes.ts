@@ -638,14 +638,68 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // Delete any staff assignments first
-      await db.delete(restaurantStaff)
-        .where(eq(restaurantStaff.userId, userId));
+      console.log(`Starting deletion process for user ${userId}`);
 
-      // Delete any owned restaurants
+      // Get all restaurants owned by the user
+      const userRestaurants = await db.query.restaurants.findMany({
+        where: eq(restaurants.ownerId, userId),
+      });
+
+      console.log(`Found ${userRestaurants.length} restaurants owned by user ${userId}`);
+
+      // For each restaurant, delete all associated data
+      for (const restaurant of userRestaurants) {
+        console.log(`Processing restaurant ${restaurant.id}`);
+
+        // Get all tables for this restaurant
+        const restaurantTables = await db.query.tables.findMany({
+          where: eq(tables.restaurantId, restaurant.id),
+        });
+
+        console.log(`Found ${restaurantTables.length} tables for restaurant ${restaurant.id}`);
+
+        // For each table, delete all associated data
+        for (const table of restaurantTables) {
+          console.log(`Processing table ${table.id}`);
+
+          // Get all requests for this table
+          const tableRequests = await db.query.requests.findMany({
+            where: eq(requests.tableId, table.id),
+          });
+
+          // Delete feedback for all requests
+          for (const request of tableRequests) {
+            await db.delete(feedback)
+              .where(eq(feedback.requestId, request.id));
+          }
+
+          // Delete requests
+          await db.delete(requests)
+            .where(eq(requests.tableId, table.id));
+
+          // Delete table sessions
+          await db.delete(tableSessions)
+            .where(eq(tableSessions.tableId, table.id));
+        }
+
+        // Delete all tables for this restaurant
+        await db.delete(tables)
+          .where(eq(tables.restaurantId, restaurant.id));
+
+        // Delete staff assignments for this restaurant
+        await db.delete(restaurantStaff)
+          .where(eq(restaurantStaff.restaurantId, restaurant.id));
+      }
+
+      // Delete all restaurants owned by the user
       await db.delete(restaurants)
         .where(eq(restaurants.ownerId, userId));
 
+      // Delete any staff assignments where this user is assigned to other restaurants
+      await db.delete(restaurantStaff)
+        .where(eq(restaurantStaff.userId, userId));
+
+      // Delete the user
       const [deletedUser] = await db.delete(users)
         .where(eq(users.id, userId))
         .returning();
@@ -654,10 +708,14 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "User not found" });
       }
 
-      res.json({ message: "User deleted successfully", user: deletedUser });
+      console.log(`Successfully deleted user ${userId} and all associated data`);
+      res.json({ message: "User and all associated data deleted successfully", user: deletedUser });
     } catch (error) {
-      console.error('Error deleting user:', error);
-      res.status(500).json({ message: "Failed to delete user" });
+      console.error('Error in deletion process:', error);
+      res.status(500).json({ 
+        message: "Failed to delete user and associated data",
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
