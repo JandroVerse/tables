@@ -227,6 +227,7 @@ export default function TablePage() {
     return () => clearInterval(interval);
   }, [sessionId, tableId]);
 
+  // Update the useEffect for WebSocket handling
   useEffect(() => {
     wsService.connect();
     const unsubscribe = wsService.subscribe((data) => {
@@ -243,6 +244,8 @@ export default function TablePage() {
       } else if (data.type === "end_session" && data.tableId === tableId) {
         // Handle session end event
         localStorage.removeItem(`table_session_${tableId}`);
+        setSessionId(null);
+        setIsSessionEnded(true);
         setLocation('/session-ended');
       }
     });
@@ -388,7 +391,7 @@ export default function TablePage() {
         title: "Session Ended",
         description: "Table session has been closed successfully.",
       });
-      window.location.reload();
+      setLocation('/session-ended');
     },
     onError: (error) => {
       toast({

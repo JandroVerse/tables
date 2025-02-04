@@ -56,7 +56,24 @@ export function registerRoutes(app: Express): Server {
       if (req.headers['sec-websocket-protocol'] === 'vite-hmr') {
         return false;
       }
-      return true;
+
+      // Extract session ID from query parameters
+      const url = new URL(req.url!, `http://${req.headers.host}`);
+      const sessionId = url.searchParams.get('sessionId');
+
+      // Allow connections without sessionId for authenticated users
+      if (!sessionId && req.isAuthenticated?.()) {
+        return true;
+      }
+
+      // For table connections, verify session
+      if (sessionId) {
+        // Allow connection, session validity will be checked per message
+        return true;
+      }
+
+      // Reject other unauthenticated connections
+      return false;
     }
   });
 
@@ -425,16 +442,16 @@ export function registerRoutes(app: Express): Server {
 
   // Session management
   app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req:Request, res:Response) => {
-    const { restaurantId, tableId } = req.params;
-    const sessionId = generateSessionId(); // Use the custom generator instead of nanoid()
-
     try {
+      const { restaurantId, tableId } = req.params;
+      const sessionId = generateSessionId(); // Use the custom generator instead of nanoid()
+
       // Close any existing active sessions for this table
       await db.update(tableSessions)
         .set({ endedAt: new Date() })
         .where(and(
           eq(tableSessions.tableId, Number(tableId)),
-          eq(tableSessions.endedAt, null)
+          isNull(tableSessions.endedAt)
         ));
 
       // Create new session
@@ -529,6 +546,7 @@ export function registerRoutes(app: Express): Server {
       res.json(allRequests);
     }
   });
+
 
 
   app.patch("/api/requests/:id", async (req:Request, res:Response) => {

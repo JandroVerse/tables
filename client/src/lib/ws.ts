@@ -7,16 +7,32 @@ class WebSocketService {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private pingInterval: number | null = null;
+  private isAuthenticated = false;
 
   connect() {
     if (this.ws?.readyState === WebSocket.OPEN) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    this.ws = new WebSocket(`${protocol}//${host}/ws`);
+
+    // Add session information to the WebSocket URL if available
+    const tableId = window.location.pathname.match(/\/request\/\d+\/(\d+)/)?.[1];
+    const sessionId = tableId ? localStorage.getItem(`table_session_${tableId}`) : null;
+    let wsUrl = `${protocol}//${host}/ws`;
+
+    if (sessionId) {
+      try {
+        const { sessionId: storedSessionId } = JSON.parse(sessionId);
+        wsUrl += `?sessionId=${encodeURIComponent(storedSessionId)}`;
+        this.isAuthenticated = true;
+      } catch (e) {
+        console.error('Error parsing session data:', e);
+      }
+    }
+
+    this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      // Only log initial connection
       if (this.reconnectAttempts === 0) {
         console.log('WebSocket connected');
       }
@@ -27,7 +43,6 @@ class WebSocketService {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        // Only log non-ping messages
         if (data.type !== 'ping') {
           console.log('WebSocket message received:', data);
         }
@@ -43,9 +58,10 @@ class WebSocketService {
       }
       this.cleanup();
 
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      // Only attempt reconnection if authenticated or on a table page
+      if ((this.isAuthenticated || window.location.pathname.includes('/request/')) && 
+          this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
-        // Only log first reconnection attempt
         if (this.reconnectAttempts === 1) {
           console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         }
@@ -57,16 +73,15 @@ class WebSocketService {
 
     this.ws.onerror = (error) => {
       console.error('WebSocket error:', error);
+      this.isAuthenticated = false;
     };
   }
 
   private startPingInterval() {
-    // Clear any existing interval
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
     }
 
-    // Send a ping every 30 seconds to keep the connection alive
     this.pingInterval = window.setInterval(() => {
       this.send({ type: 'ping', timestamp: new Date().toISOString() });
     }, 30000);
@@ -88,7 +103,6 @@ class WebSocketService {
         console.error('Error sending WebSocket message:', error);
       }
     } else {
-      // Only log if it's not a ping message
       if (data.type !== 'ping') {
         console.warn('WebSocket is not connected. Message not sent:', data);
       }
@@ -108,6 +122,7 @@ class WebSocketService {
       this.cleanup();
     }
     this.listeners = [];
+    this.isAuthenticated = false;
   }
 }
 

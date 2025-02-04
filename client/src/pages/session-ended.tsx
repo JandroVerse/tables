@@ -9,7 +9,7 @@ export default function SessionEndedPage() {
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground mb-6">
-            This table's session has been ended by staff. Please scan the QR code again to start a new session.
+            This table's session has been ended. Please scan the QR code again to start a new session.
           </p>
         </CardContent>
       </Card>
