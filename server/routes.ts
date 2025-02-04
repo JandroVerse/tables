@@ -231,6 +231,7 @@ export function registerRoutes(app: Express): Server {
             table,
             activeSession: {
               id: activeSession.sessionId,
+              startedAt: activeSession.startedAt,
               expiresIn: SESSION_DURATION - sessionAge
             }
           });
@@ -462,6 +463,7 @@ export function registerRoutes(app: Express): Server {
   });
 
 
+
   app.get("/api/requests", async (req:Request, res:Response) => {
     const { tableId, sessionId } = req.query;
     let query = {};
@@ -494,7 +496,6 @@ export function registerRoutes(app: Express): Server {
       res.json(allRequests);
     }
   });
-
 
 
   app.patch("/api/requests/:id", async (req:Request, res:Response) => {

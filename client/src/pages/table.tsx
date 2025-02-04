@@ -64,17 +64,11 @@ export default function TablePage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(() => {
-    // Initialize from localStorage if available
     const savedSession = localStorage.getItem(`table_session_${tableId}`);
     if (savedSession) {
       try {
-        const { sessionId, timestamp, isCreator } = JSON.parse(savedSession);
-        // Check if the session is not expired (1 hour)
-        if (Date.now() - timestamp < 60 * 60 * 1000) {
-          return sessionId;
-        } else {
-          localStorage.removeItem(`table_session_${tableId}`);
-        }
+        const { sessionId, startedAt, isCreator } = JSON.parse(savedSession);
+        return sessionId;
       } catch (e) {
         localStorage.removeItem(`table_session_${tableId}`);
       }
@@ -82,7 +76,6 @@ export default function TablePage() {
     return null;
   });
 
-  // Modified to track if this user created the session
   const [isSessionCreator, setIsSessionCreator] = useState<boolean>(() => {
     const savedSession = localStorage.getItem(`table_session_${tableId}`);
     if (savedSession) {
@@ -104,10 +97,35 @@ export default function TablePage() {
   const [sessionInputValue, setSessionInputValue] = useState("");
   const [sessionError, setSessionError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [sessionTimeRemaining, setSessionTimeRemaining] = useState(60 * 60 * 1000); // 1 hour in ms
+  const [sessionTimeRemaining, setSessionTimeRemaining] = useState(60 * 60 * 1000);
 
 
-  // Modified table verification effect
+  const handleSessionSubmit = () => {
+    if (!sessionInputValue) {
+      setSessionError("Please enter a session ID");
+      return;
+    }
+
+    if (sessionInputValue !== currentSessionId) {
+      setSessionError("Invalid session ID");
+      return;
+    }
+
+    const sessionData = {
+      sessionId: sessionInputValue,
+      startedAt: new Date().toISOString(), // This will be replaced with server response
+      isCreator: false 
+    };
+    localStorage.setItem(
+      `table_session_${tableId}`,
+      JSON.stringify(sessionData)
+    );
+    setSessionId(sessionInputValue);
+    setIsSessionPromptOpen(false);
+    queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+  };
+
+  // Verify table and manage session
   useEffect(() => {
     if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
       fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`)
@@ -116,14 +134,23 @@ export default function TablePage() {
           if (data.valid) {
             setIsValid(true);
             if (data.activeSession) {
-              // Only show session prompt if we don't have a valid stored session
-              // or if we're not the creator of this session
               if (!sessionId || (data.activeSession.id !== sessionId && !isSessionCreator)) {
                 setCurrentSessionId(data.activeSession.id);
                 setIsSessionPromptOpen(true);
               }
+              setSessionTimeRemaining(data.activeSession.expiresIn);
+
+              // Update localStorage with server's session start time
+              const savedSession = localStorage.getItem(`table_session_${tableId}`);
+              if (savedSession) {
+                const sessionData = JSON.parse(savedSession);
+                sessionData.startedAt = data.activeSession.startedAt;
+                localStorage.setItem(
+                  `table_session_${tableId}`,
+                  JSON.stringify(sessionData)
+                );
+              }
             } else if (data.requiresNewSession && !sessionId) {
-              // Only create new session if we don't have a stored session
               return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
             }
             return null;
@@ -138,8 +165,8 @@ export default function TablePage() {
           if (session) {
             const sessionData = {
               sessionId: session.sessionId,
-              timestamp: Date.now(),
-              isCreator: true // Mark this user as the session creator
+              startedAt: session.startedAt,
+              isCreator: true
             };
             localStorage.setItem(
               `table_session_${tableId}`,
@@ -148,6 +175,7 @@ export default function TablePage() {
             setCurrentSessionId(session.sessionId);
             setSessionId(session.sessionId);
             setIsSessionCreator(true);
+            setSessionTimeRemaining(60 * 60 * 1000); // 1 hour in milliseconds
             queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
             toast({
               title: "Session Created",
@@ -169,33 +197,29 @@ export default function TablePage() {
     }
   }, [restaurantId, tableId]);
 
+  // Timer update effect
   useEffect(() => {
     if (!sessionId) return;
 
-    // Get initial remaining time from localStorage
-    const savedSession = localStorage.getItem(`table_session_${tableId}`);
-    if (savedSession) {
-      try {
-        const { timestamp } = JSON.parse(savedSession);
-        const elapsed = Date.now() - timestamp;
-        const remaining = Math.max(60 * 60 * 1000 - elapsed, 0);
-        setSessionTimeRemaining(remaining);
-      } catch (e) {
-        console.error('Error parsing session timestamp:', e);
-      }
-    }
-
-    // Update timer every second
     const interval = setInterval(() => {
-      setSessionTimeRemaining(prev => {
-        const remaining = Math.max(prev - 1000, 0);
-        if (remaining === 0) {
-          // Session expired
-          localStorage.removeItem(`table_session_${tableId}`);
-          window.location.reload();
+      const savedSession = localStorage.getItem(`table_session_${tableId}`);
+      if (savedSession) {
+        try {
+          const { startedAt } = JSON.parse(savedSession);
+          const sessionStartTime = new Date(startedAt).getTime();
+          const elapsed = Date.now() - sessionStartTime;
+          const remaining = Math.max(60 * 60 * 1000 - elapsed, 0);
+
+          setSessionTimeRemaining(remaining);
+
+          if (remaining === 0) {
+            localStorage.removeItem(`table_session_${tableId}`);
+            window.location.reload();
+          }
+        } catch (e) {
+          console.error('Error calculating session time:', e);
         }
-        return remaining;
-      });
+      }
     }, 1000);
 
     return () => clearInterval(interval);
@@ -204,7 +228,6 @@ export default function TablePage() {
   useEffect(() => {
     wsService.connect();
     const unsubscribe = wsService.subscribe((data) => {
-      // Handle different types of updates
       if (data.type === "new_request" && data.tableId === tableId) {
         queryClient.invalidateQueries({
           queryKey: ["/api/requests", tableId],
@@ -218,7 +241,6 @@ export default function TablePage() {
       }
     });
 
-    // Cleanup function
     return () => {
       unsubscribe();
       wsService.disconnect();
@@ -234,37 +256,43 @@ export default function TablePage() {
       return res.json();
     },
     enabled: !!tableId && !isNaN(tableId) && !!sessionId,
-    // Add some options to make updates more responsive
     refetchOnWindowFocus: true,
     refetchOnMount: true,
     staleTime: 0,
-    refetchInterval: 5000 // Polling fallback every 5 seconds
+    refetchInterval: 5000 
   });
 
-  // Handle session input submission
-  const handleSessionSubmit = () => {
-    if (!sessionInputValue) {
-      setSessionError("Please enter a session ID");
-      return;
-    }
-
-    if (sessionInputValue !== currentSessionId) {
-      setSessionError("Invalid session ID");
-      return;
-    }
-
-    const sessionData = {
-      sessionId: sessionInputValue,
-      timestamp: Date.now(),
-      isCreator: false // This user joined an existing session
-    };
-    localStorage.setItem(
-      `table_session_${tableId}`,
-      JSON.stringify(sessionData)
+  const hasActiveRequest = (type: string) => {
+    return requests.some(
+      (request) =>
+        request.type === type &&
+        request.status !== "completed" &&
+        request.status !== "cleared"
     );
-    setSessionId(sessionInputValue);
-    setIsSessionPromptOpen(false);
-    queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+  };
+
+  const handleOtherRequest = () => {
+    if (!otherRequestNote.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a message for your request.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (hasActiveRequest("other") && requests.some(
+      (r) => r.type === "other" &&
+            r.notes === otherRequestNote &&
+            r.status !== "completed"
+    )) {
+      toast({
+        title: "Request already exists",
+        description: "This request is already being processed.",
+        variant: "destructive",
+      });
+      return;
+    }
+    createRequest({ type: "other", notes: otherRequestNote });
   };
 
   const { mutate: createRequest } = useMutation({
@@ -374,7 +402,6 @@ export default function TablePage() {
     );
   }
 
-  // Add session prompt dialog
   if (isSessionPromptOpen) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -414,37 +441,115 @@ export default function TablePage() {
 
   if (!sessionId) return <div>Initializing table session...</div>;
 
-  const hasActiveRequest = (type: string) => {
-    return requests.some(
-      (request) =>
-        request.type === type &&
-        request.status !== "completed" &&
-        request.status !== "cleared"
+  const renderRequests = (requestsToRender: RequestWithTable[]) => {
+    return (
+      <AnimatePresence mode="popLayout">
+        <div className="space-y-3">
+          {requestsToRender.map((request) => (
+            <motion.div
+              key={request.id}
+              layout
+              variants={cardVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={{
+                layout: { duration: 0.3 },
+                opacity: { duration: 0.2 },
+              }}
+            >
+              <Card
+                className={`overflow-hidden transition-colors ${
+                  request.type === "waiter"
+                    ? "hover:bg-purple-300 bg-purple-200"
+                    : request.type === "water"
+                    ? "hover:bg-blue-200 bg-blue-100"
+                    : request.type === "check"
+                    ? "hover:bg-emerald-300 bg-emerald-200"
+                    : "hover:bg-green-50/50"
+                }`}
+              >
+                <CardContent className="p-4">
+                  <div className="font-medium text-primary">
+                    {request.type === "water" ? "Water Refill" :
+                      request.type === "waiter" ? "Call Waiter" :
+                        request.type === "check" ? "Get Check" :
+                          request.type}
+                    {request.table && (
+                      <span className="ml-2 text-sm text-muted-foreground">
+                        {request.table.name}
+                      </span>
+                    )}
+                  </div>
+                  {request.notes && (
+                    <div className="text-sm text-gray-600 mt-2">
+                      {request.notes}
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center mt-2">
+                    <motion.div
+                      className="text-sm"
+                      variants={statusVariants}
+                      animate={request.status as keyof typeof statusVariants}
+                      transition={{ duration: 0.3 }}
+                    >
+                      Status:{" "}
+                      <span className="capitalize">
+                        {request.status === "in_progress" ? "In Progress" :
+                          request.status === "pending" ? "Pending" :
+                            request.status === "completed" ? "Completed" :
+                              request.status === "cleared" ? "Cancelled" :
+                                request.status}
+                      </span>
+                    </motion.div>
+                    {request.status === "pending" && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <motion.div
+                            variants={buttonVariants}
+                            initial="idle"
+                            whileHover="hover"
+                            whileTap="tap"
+                          >
+                            <Button variant="outline" size="sm">
+                              Cancel Request
+                            </Button>
+                          </motion.div>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Cancel Request?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to cancel this
+                              request? This action cannot be
+                              undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>
+                              No, keep it
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() =>
+                                cancelRequest(request.id)
+                              }
+                            >
+                              Yes, cancel it
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      </AnimatePresence>
     );
-  };
-
-  const handleOtherRequest = () => {
-    if (!otherRequestNote.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a message for your request.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (hasActiveRequest("other") && requests.some(
-      (r) => r.type === "other" &&
-            r.notes === otherRequestNote &&
-            r.status !== "completed"
-    )) {
-      toast({
-        title: "Request already exists",
-        description: "This request is already being processed.",
-        variant: "destructive",
-      });
-      return;
-    }
-    createRequest({ type: "other", notes: otherRequestNote });
   };
 
   return (
@@ -705,179 +810,12 @@ export default function TablePage() {
                   <TabsTrigger value="completed">Completed</TabsTrigger>
                 </TabsList>
                 <TabsContent value="active" className="mt-4">
-                  <AnimatePresence mode="popLayout">
-                    <div className="space-y-3">
-                      {requests
-                        .filter(
-                          (r) => r.status !== "completed" && r.status !== "cleared"
-                        )
-                        .map((request) => (
-                          <motion.div
-                            key={request.id}
-                            layout
-                            variants={cardVariants}
-                            initial="initial"
-                            animate="animate"
-                            exit="exit"
-                            transition={{
-                              layout: { duration: 0.3 },
-                              opacity: { duration: 0.2 },
-                            }}
-                          >
-                            <Card
-                              className={`overflow-hidden transition-colors ${
-                                request.type === "waiter"
-                                  ? "hover:bg-purple-300 bg-purple-200"
-                                  : request.type === "water"
-                                  ? "hover:bg-blue-200 bg-blue-100"
-                                  : request.type === "check"
-                                  ? "hover:bg-emerald-300 bg-emerald-200"
-                                  : "hover:bg-green-50/50"
-                              }`}
-                            >
-                              <CardContent className="p-4">
-                                <div className="font-medium text-primary">
-                                  {request.type === "water" ? "Water Refill" :
-                                    request.type === "waiter" ? "Call Waiter" :
-                                      request.type === "check" ? "Get Check" :
-                                        request.type}
-                                  {request.table && (
-                                    <span className="ml-2 text-sm text-muted-foreground">
-                                      {request.table.name}
-                                    </span>
-                                  )}
-                                </div>
-                                {request.notes && (
-                                  <div className="text-sm text-gray-600 mt-2">
-                                    {request.notes}
-                                  </div>
-                                )}
-                                <div className="flex justify-between items-center mt-2">
-                                  <motion.div
-                                    className="text-sm"
-                                    variants={statusVariants}
-                                    animate={request.status as keyof typeof statusVariants}
-                                    transition={{ duration: 0.3 }}
-                                  >
-                                    Status:{" "}
-                                    <span className="capitalize">
-                                      {request.status === "in_progress" ? "In Progress" :
-                                        request.status === "pending" ? "Pending" :
-                                          request.status === "completed" ? "Completed" :
-                                            request.status === "cleared" ? "Cancelled" :
-                                              request.status}
-                                    </span>
-                                  </motion.div>
-                                  {request.status === "pending" && (
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <motion.div
-                                          variants={buttonVariants}
-                                          initial="idle"
-                                          whileHover="hover"
-                                          whileTap="tap"
-                                        >
-                                          <Button variant="outline" size="sm">
-                                            Cancel Request
-                                          </Button>
-                                        </motion.div>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>
-                                            Cancel Request?
-                                          </AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            Are you sure you want to cancel this
-                                            request? This action cannot be
-                                            undone.
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>
-                                            No, keep it
-                                          </AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() =>
-                                              cancelRequest(request.id)
-                                            }
-                                          >
-                                            Yes, cancel it
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </motion.div>
-                        ))}
-                    </div>
-                  </AnimatePresence>
+                  {renderRequests(requests.filter(
+                    (r) => r.status !== "completed" && r.status !== "cleared"
+                  ))}
                 </TabsContent>
                 <TabsContent value="completed" className="mt-4">
-                  <AnimatePresence mode="popLayout">
-                    <div className="space-y-3">
-                      {requests
-                        .filter((r) => r.status === "completed")
-                        .map((request) => (
-                          <motion.div
-                            key={request.id}
-                            layout
-                            variants={cardVariants}
-                            initial="initial"
-                            animate="animate"
-                            exit="exit"
-                            transition={{
-                              layout: { duration: 0.3 },
-                              opacity: { duration: 0.2 },
-                            }}
-                          >
-                            <Card className="overflow-hidden transition-colors hover:bg-green-50/50">
-                              <CardContent className="p-4">
-                                <div className="font-medium text-primary">
-                                  {request.type === "water" ? "Water Refill" :
-                                    request.type === "waiter" ? "Call Waiter" :
-                                      request.type === "check" ? "Get Check" :
-                                        request.type}
-                                  {request.table && (
-                                    <span className="ml-2 text-sm text-muted-foreground">
-                                      {request.table.name}
-                                    </span>
-                                  )}
-                                </div>
-                                {request.notes && (
-                                  <div className="text-sm text-gray-600 mt-2">
-                                    {request.notes}
-                                  </div>
-                                )}
-                                <div className="flex justify-between items-center mt-3">
-                                  <div className="text-sm text-gray-500">
-                                    Completed
-                                  </div>
-                                  <motion.div
-                                    variants={buttonVariants}
-                                    initial="idle"
-                                    whileHover="hover"
-                                    whileTap="tap"
-                                  >
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setFeedbackRequest(request)}
-                                      className="hover:border-primary/50"
-                                    >
-                                      Rate Service
-                                    </Button>
-                                  </motion.div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </motion.div>
-                        ))}
-                    </div>
-                  </AnimatePresence>
+                  {renderRequests(requests.filter((r) => r.status === "completed"))}
                 </TabsContent>
               </Tabs>
             )}
@@ -897,5 +835,5 @@ export default function TablePage() {
 }
 
 interface RequestWithTable extends Request {
-  table?: Table;  // Make table optional since it might not be loaded yet
+  table?: Table; 
 }
