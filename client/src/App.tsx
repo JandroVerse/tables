@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import TablePage from "@/pages/table";
 import AdminPage from "@/pages/admin";
+import AdminDashboard from "@/pages/admin-dashboard";
 import QRPage from "@/pages/qr";
 import AuthPage from "@/pages/auth";
 import OnboardingPage from "@/pages/onboarding";
@@ -23,6 +24,7 @@ function Router() {
       </Route>
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/admin" component={AdminPage} />
+      <ProtectedRoute path="/admin/dashboard" component={AdminDashboard} />
       <ProtectedRoute path="/onboarding" component={OnboardingPage} />
       <ProtectedRoute path="/qr" component={QRPage} />
       <Route component={NotFound} />

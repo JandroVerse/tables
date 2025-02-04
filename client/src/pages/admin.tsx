@@ -1,9 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { Loader2, LogOut, Users } from "lucide-react";
+import { motion } from "framer-motion";
+import { FloorPlanEditor } from "@/components/floor-plan-editor";
+import { AnimatedBackground } from "@/components/animated-background";
+import { useToast } from "@/hooks/use-toast";
+import type { Request, Table, Restaurant } from "@db/schema";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
+import { useEffect } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { AnimatePresence } from "framer-motion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,29 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
-import { useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { Link, useLocation } from "wouter";
-import type { Request, Table, Restaurant } from "@db/schema";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { motion, AnimatePresence } from "framer-motion";
-import { FloorPlanEditor } from "@/components/floor-plan-editor";
-import { AnimatedBackground } from "@/components/animated-background";
-import { useAuth } from "@/hooks/use-auth";
-import { Loader2, LogOut } from "lucide-react";
-import { UserManagement } from "@/components/user-management";
 
-const cardVariants = {
-  initial: { opacity: 0, scale: 0.95 },
-  animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
-};
-
-const columnVariants = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -20 }
-};
 
 interface CreateRestaurantForm {
   name: string;
@@ -52,7 +41,7 @@ export default function AdminPage() {
   const queryClient = useQueryClient();
   const form = useForm<CreateRestaurantForm>();
   const [_, setLocation] = useLocation();
-  const { logoutMutation } = useAuth();
+  const { logoutMutation, user } = useAuth();
   const sessionId = 'someSessionId'; // Replace with actual session ID retrieval
 
   const { data: restaurants = [], isLoading: isLoadingRestaurants } = useQuery<Restaurant[]>({
@@ -199,6 +188,18 @@ export default function AdminPage() {
     createRestaurant(data);
   };
 
+  const cardVariants = {
+    initial: { opacity: 0, scale: 0.95 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
+  };
+
+  const columnVariants = {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -20 }
+  };
+
   if (isLoadingRestaurants) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -225,6 +226,16 @@ export default function AdminPage() {
               : "Restaurant Admin Dashboard"}
           </h1>
           <div className="flex gap-2">
+            {user?.isAdmin && (
+              <Link href="/admin/dashboard">
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button variant="outline" className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Admin Dashboard
+                  </Button>
+                </motion.div>
+              </Link>
+            )}
             <Link href="/qr">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 <Button variant="outline">View QR Codes</Button>
@@ -251,7 +262,6 @@ export default function AdminPage() {
         {currentRestaurant ? (
           <>
             <FloorPlanEditor restaurantId={currentRestaurant.id} />
-            <UserManagement />
           </>
         ) : (
           <Card>
@@ -303,7 +313,6 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         )}
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {statuses.map((status) => (
             <motion.div
