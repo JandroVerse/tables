@@ -46,6 +46,13 @@ class WebSocketService {
         if (data.type !== 'ping') {
           console.log('WebSocket message received:', data);
         }
+
+        // If session end message is received, clear all session data
+        if (data.type === 'end_session' && tableId) {
+          localStorage.removeItem(`table_session_${tableId}`);
+          this.isAuthenticated = false;
+        }
+
         this.listeners.forEach(listener => listener(data));
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);

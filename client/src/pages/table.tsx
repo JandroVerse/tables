@@ -31,7 +31,7 @@ import type { Request, Table } from "@db/schema";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedBackground } from "@/components/animated-background";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Redirect } from "wouter";
 
 const cardVariants = {
   initial: { opacity: 0, y: 20 },
@@ -152,7 +152,8 @@ export default function TablePage() {
                   JSON.stringify(sessionData)
                 );
               }
-            } else if (data.requiresNewSession && !sessionId) {
+            } else if (data.requiresNewSession && !sessionId && !isSessionEnded) {
+              // Only create new session if not coming from a session end
               return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
             }
             return null;
@@ -197,7 +198,7 @@ export default function TablePage() {
           setIsValidating(false);
         });
     }
-  }, [restaurantId, tableId]);
+  }, [restaurantId, tableId, isSessionEnded]);
 
   // Timer update effect
   useEffect(() => {
@@ -216,6 +217,7 @@ export default function TablePage() {
 
           if (remaining === 0) {
             localStorage.removeItem(`table_session_${tableId}`);
+            setIsSessionEnded(true); //Added to set state before reload
             window.location.reload();
           }
         } catch (e) {
@@ -404,28 +406,7 @@ export default function TablePage() {
   });
 
   if (isSessionEnded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="w-[90%] max-w-md">
-          <CardHeader>
-            <CardTitle>Session Ended</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-6">
-              This table's session has been ended by staff. To start a new session, please scan the QR code again.
-            </p>
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => window.location.reload()}
-              >
-                Scan New QR Code
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <Redirect to="/session-ended" />;
   }
 
   if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
