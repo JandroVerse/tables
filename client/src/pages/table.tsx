@@ -53,6 +53,7 @@ const statusVariants = {
   pending: { color: "#71717a" },
   in_progress: { color: "#059669" },
   completed: { color: "#0284c7" },
+  cleared: { color: "#71717a" },
 };
 
 export default function TablePage() {
@@ -565,7 +566,11 @@ export default function TablePage() {
                                   >
                                     Status:{" "}
                                     <span className="capitalize">
-                                      {request.status.replace("_", " ")}
+                                      {request.status === "in_progress" ? "In Progress" :
+                                       request.status === "pending" ? "Pending" :
+                                       request.status === "completed" ? "Completed" :
+                                       request.status === "cleared" ? "Cancelled" :
+                                       request.status.replace("_", " ")}
                                     </span>
                                   </motion.div>
                                   {request.status === "pending" && (
