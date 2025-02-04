@@ -27,6 +27,7 @@ import { FloorPlanEditor } from "@/components/floor-plan-editor";
 import { AnimatedBackground } from "@/components/animated-background";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2, LogOut } from "lucide-react";
+import { UserManagement } from "@/components/user-management";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -230,8 +231,8 @@ export default function AdminPage() {
               </motion.div>
             </Link>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => logoutMutation.mutate()}
                 disabled={logoutMutation.isPending}
                 className="hover:bg-destructive/10"
@@ -248,7 +249,10 @@ export default function AdminPage() {
         </div>
 
         {currentRestaurant ? (
-          <FloorPlanEditor restaurantId={currentRestaurant.id} />
+          <>
+            <FloorPlanEditor restaurantId={currentRestaurant.id} />
+            <UserManagement />
+          </>
         ) : (
           <Card>
             <CardHeader>

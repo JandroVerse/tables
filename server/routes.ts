@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
-import { tables, requests, feedback, tableSessions, restaurants } from "@db/schema";
+import { tables, requests, feedback, tableSessions, restaurants, users, restaurantStaff } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
@@ -605,6 +605,72 @@ export function registerRoutes(app: Express): Server {
 
     const allFeedback = await db.query.feedback.findMany(query);
     res.json(allFeedback);
+  });
+
+  // Add this route before the delete route
+  app.get("/api/users", ensureAuthenticated, async (req, res) => {
+    // Only allow admins to view all users
+    if (!req.user!.isAdmin) {
+      return res.status(403).json({ message: "Only admins can view all users" });
+    }
+
+    try {
+      const allUsers = await db.query.users.findMany({
+        orderBy: (users, { asc }) => [asc(users.username)],
+      });
+
+      // Remove sensitive information before sending
+      const safeUsers = allUsers.map(({ password, ...user }) => user);
+      res.json(safeUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.delete("/api/users/:id", ensureAuthenticated, async (req, res) => {
+    const { id } = req.params;
+    const userId = Number(id);
+
+    // Don't allow users to delete themselves
+    if (userId === req.user!.id) {
+      return res.status(400).json({ message: "Cannot delete your own account" });
+    }
+
+    // Only allow deletion if the current user is an admin
+    if (!req.user!.isAdmin) {
+      return res.status(403).json({ message: "Only admins can delete users" });
+    }
+
+    try {
+      // Check if user owns any restaurants
+      const userRestaurants = await db.query.restaurants.findMany({
+        where: eq(restaurants.ownerId, userId),
+      });
+
+      if (userRestaurants.length > 0) {
+        return res.status(400).json({ 
+          message: "Cannot delete user who owns restaurants. Please transfer or delete their restaurants first." 
+        });
+      }
+
+      // Delete any staff assignments first
+      await db.delete(restaurantStaff)
+        .where(eq(restaurantStaff.userId, userId));
+
+      const [deletedUser] = await db.delete(users)
+        .where(eq(users.id, userId))
+        .returning();
+
+      if (!deletedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({ message: "User deleted successfully", user: deletedUser });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ message: "Failed to delete user" });
+    }
   });
 
   return httpServer;

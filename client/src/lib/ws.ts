@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { useAuth } from "@/hooks/use-auth";
 
 type ServiceRequestListener = (data: any) => void;
 
@@ -22,6 +23,7 @@ class WebSocketService {
     private connectionTimer: NodeJS.Timeout | null = null;
     private sessionId: string | null = null;
     private clientType: 'customer' | 'admin' = 'customer';
+    private pingInterval: NodeJS.Timeout | null = null;
 
     connect(sessionId: string, type: 'customer' | 'admin' = 'customer') {
       if (!sessionId) {
@@ -29,12 +31,7 @@ class WebSocketService {
         return;
       }
 
-      if (this.ws && this.ws.readyState === WebSocket.OPEN && this.sessionId === sessionId) {
-        console.log('WebSocket: Already connected with same sessionId');
-        return;
-      }
-
-      // Clean up existing connection if any
+      // Clean up any existing connection
       this.disconnect();
 
       this.sessionId = sessionId;
@@ -56,6 +53,7 @@ class WebSocketService {
           console.log('WebSocket: Connection established');
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          this.startPingInterval();
           this.notifyListeners({
             type: 'connection_status',
             status: 'connected'
@@ -66,6 +64,11 @@ class WebSocketService {
           try {
             const data = JSON.parse(event.data);
             console.log('WebSocket: Received message:', data);
+
+            if (data.type === 'ping') {
+              this.send({ type: 'pong' });
+              return;
+            }
 
             // Special handling for admin data requests when in customer mode
             if (this.clientType === 'customer' && data.type === 'admin_data_request') {
@@ -79,10 +82,11 @@ class WebSocketService {
           }
         };
 
-        this.ws.onclose = () => {
-          console.log('WebSocket: Connection closed');
+        this.ws.onclose = (event) => {
+          console.log('WebSocket: Connection closed', event);
           this.isConnected = false;
           this.ws = null;
+          this.stopPingInterval();
           this.handleReconnect();
         };
 
@@ -95,6 +99,22 @@ class WebSocketService {
       } catch (error) {
         console.error('WebSocket: Failed to create connection:', error);
         this.handleReconnect();
+      }
+    }
+
+    private startPingInterval() {
+      this.stopPingInterval();
+      this.pingInterval = setInterval(() => {
+        if (this.isConnected) {
+          this.send({ type: 'ping' });
+        }
+      }, 30000); // Send ping every 30 seconds
+    }
+
+    private stopPingInterval() {
+      if (this.pingInterval) {
+        clearInterval(this.pingInterval);
+        this.pingInterval = null;
       }
     }
 
@@ -133,7 +153,11 @@ class WebSocketService {
         });
 
         this.reconnectAttempts++;
-        this.connectionTimer = setTimeout(() => this.connect(this.sessionId!, this.clientType), delay);
+        this.connectionTimer = setTimeout(() => {
+          if (this.sessionId) {
+            this.connect(this.sessionId, this.clientType);
+          }
+        }, delay);
       } else {
         console.error('WebSocket: Max reconnection attempts reached');
       }
@@ -142,9 +166,6 @@ class WebSocketService {
     send(message: WebSocketMessage) {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         console.error('WebSocket: Cannot send message - connection not open');
-        if (this.sessionId) {
-          this.connect(this.sessionId, this.clientType);
-        }
         return;
       }
 
@@ -174,6 +195,7 @@ class WebSocketService {
 
     disconnect() {
       console.log('WebSocket: Disconnecting...');
+      this.stopPingInterval();
       if (this.connectionTimer) {
         clearTimeout(this.connectionTimer);
         this.connectionTimer = null;
@@ -192,7 +214,13 @@ class WebSocketService {
     }
 
     private notifyListeners(message: WebSocketMessage) {
-      this.listeners.forEach(listener => listener(message));
+      this.listeners.forEach(listener => {
+        try {
+          listener(message);
+        } catch (error) {
+          console.error('WebSocket: Error in listener:', error);
+        }
+      });
     }
 
     // Method for admin to request data from customer
