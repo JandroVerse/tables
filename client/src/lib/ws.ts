@@ -6,6 +6,7 @@ class WebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private pingInterval: number | null = null;
 
   connect() {
     if (this.ws?.readyState === WebSocket.OPEN) return;
@@ -17,6 +18,7 @@ class WebSocketService {
     this.ws.onopen = () => {
       console.log('WebSocket connected');
       this.reconnectAttempts = 0;
+      this.startPingInterval();
     };
 
     this.ws.onmessage = (event) => {
@@ -31,7 +33,7 @@ class WebSocketService {
 
     this.ws.onclose = () => {
       console.log('WebSocket connection closed');
-      this.ws = null;
+      this.cleanup();
 
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
@@ -43,6 +45,26 @@ class WebSocketService {
     this.ws.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
+  }
+
+  private startPingInterval() {
+    // Clear any existing interval
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+    }
+
+    // Send a ping every 30 seconds to keep the connection alive
+    this.pingInterval = window.setInterval(() => {
+      this.send({ type: 'ping', timestamp: new Date().toISOString() });
+    }, 30000);
+  }
+
+  private cleanup() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    this.ws = null;
   }
 
   send(data: any) {
@@ -67,7 +89,7 @@ class WebSocketService {
   disconnect() {
     if (this.ws) {
       this.ws.close();
-      this.ws = null;
+      this.cleanup();
     }
     this.listeners = [];
   }

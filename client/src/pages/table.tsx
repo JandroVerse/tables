@@ -56,80 +56,46 @@ export default function TablePage() {
   const queryClient = useQueryClient();
   const params = useParams();
 
+  console.log('Table Page Params:', params);
+
   const restaurantId = Number(params.restaurantId);
   const tableId = Number(params.tableId);
 
+  console.log('Parsed IDs:', { restaurantId, tableId });
   const [otherRequestNote, setOtherRequestNote] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(() => {
-    const storedSession = localStorage.getItem(`table_session_${tableId}`);
-    if (storedSession) {
-      try {
-        const session = JSON.parse(storedSession);
-        if (new Date(session.expiry) > new Date()) {
-          return session.id;
-        } else {
-          localStorage.removeItem(`table_session_${tableId}`);
-        }
-      } catch (e) {
-        localStorage.removeItem(`table_session_${tableId}`);
-      }
-    }
-    return null;
-  });
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [isWaterDialogOpen, setIsWaterDialogOpen] = useState(false);
   const [waterCount, setWaterCount] = useState(1);
   const [isValidating, setIsValidating] = useState(true);
   const [isValid, setIsValid] = useState(false);
-  const [tableData, setTableData] = useState<any>(null);
 
+  // Verify the table exists first
   useEffect(() => {
     if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
-      console.log(`Attempting to fetch table ${tableId} for restaurant ${restaurantId}`);
-
-      fetch(`/api/restaurants/${restaurantId}/tables/${tableId}`)
-        .then(async (res) => {
-          const text = await res.text();
-          console.log('Raw API response:', text);
-
-          if (!res.ok) {
-            throw new Error(text || "Invalid table");
-          }
-
-          const data = JSON.parse(text);
-          console.log('Parsed table data:', data);
-
-          if (!data || data.restaurantId !== restaurantId) {
-            throw new Error("Table does not belong to this restaurant");
-          }
-
-          setTableData(data);
-          setIsValid(true);
-
-          if (!sessionId) {
+      fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.valid) {
+            setIsValid(true);
+            // Fixed the session creation endpoint URL
             return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
           }
-          return new Response(JSON.stringify({ sessionId }));
+          throw new Error("Invalid table");
         })
         .then((res) => res.json())
         .then((session) => {
-          console.log('Session data:', session);
           setSessionId(session.sessionId);
-          localStorage.setItem(`table_session_${tableId}`, JSON.stringify({
-            id: session.sessionId,
-            expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-          }));
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
         })
         .catch((error) => {
           console.error("Failed to verify table or create session:", error);
           toast({
             title: "Error",
-            description: error.message || "This table appears to be invalid or no longer exists.",
+            description: "This table appears to be invalid or no longer exists.",
             variant: "destructive",
           });
-          setIsValid(false);
         })
         .finally(() => {
           setIsValidating(false);
@@ -143,13 +109,12 @@ export default function TablePage() {
 
     const unsubscribe = wsService.subscribe((data) => {
       console.log('Received WebSocket message:', data);
-      if (data.type === "new_request" || data.type === "update_request") {
-        console.log('Invalidating requests query...');
-        // Force a refetch instead of just invalidating
-        queryClient.refetchQueries({ 
-          queryKey: ["/api/requests", tableId, restaurantId],
-          exact: true,
-          type: 'active'
+      if ((data.type === "new_request" || data.type === "update_request") && 
+          data.tableId === tableId) {
+        console.log('Received relevant request update, refreshing...');
+        queryClient.invalidateQueries({ 
+          queryKey: ["/api/requests", tableId],
+          exact: true 
         });
       }
     });
@@ -159,72 +124,47 @@ export default function TablePage() {
       unsubscribe();
       wsService.disconnect();
     };
-  }, [tableId, queryClient, restaurantId]);
+  }, [tableId, queryClient]);
 
-  const { data: requests = [], refetch: refetchRequests } = useQuery<Request[]>({
-    queryKey: ["/api/requests", tableId, restaurantId],
+  const { data: requests = [] } = useQuery<Request[]>({
+    queryKey: ["/api/requests", tableId],
     queryFn: async () => {
       if (!sessionId) return [];
-      const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`);
+      const res = await fetch(`/api/requests?tableId=${tableId}&sessionId=${sessionId}`);
       if (!res.ok) throw new Error("Failed to fetch requests");
-      const data = await res.json();
-      return data.map((request: any) => ({
-        ...request,
-        tableName: tableData?.name
-      }));
+      return res.json();
     },
-    enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData && !!restaurantId && !isNaN(restaurantId),
-    // Add polling as a backup for real-time updates
-    refetchInterval: 5000
+    enabled: !!tableId && !isNaN(tableId) && !!sessionId,
+    // Add some options to make updates more responsive
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    staleTime: 0
   });
 
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
       if (!sessionId) throw new Error("No active session");
-      if (!restaurantId || !tableId) {
-        throw new Error("Invalid table or restaurant");
-      }
-
-      console.log('Attempting to create request:', {
-        tableId,
-        restaurantId,
-        sessionId,
-        type,
-        notes
-      });
-
       const response = await apiRequest("POST", "/api/requests", {
-        tableId: Number(tableId),
-        restaurantId: Number(restaurantId),
-        sessionId,
+        tableId,
         type,
         notes,
+        sessionId,
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to create request:', errorText);
-        throw new Error(errorText || "Failed to create request");
-      }
-
-      const data = await response.json();
-      console.log('Successfully created request:', data);
-      return data;
+      return response.json();
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
       setOtherRequestNote("");
       setIsDialogOpen(false);
       toast({
         title: "Request sent",
         description: "Staff has been notified of your request.",
       });
-      console.log('Request created successfully:', data);
     },
-    onError: (error: Error) => {
+    onError: (error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to send request. Please try again.",
+        description: "Failed to send request. Please try again.",
         variant: "destructive",
       });
       console.error("Failed to create request:", error);
@@ -236,7 +176,7 @@ export default function TablePage() {
       return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
       toast({
         title: "Request cancelled",
         description: "Your request has been cancelled successfully.",
@@ -317,7 +257,7 @@ export default function TablePage() {
       });
       return;
     }
-    if (hasActiveRequest("other") && requests.some(
+     if (hasActiveRequest("other") && requests.some(
       (r) => r.type === "other" &&
             r.notes === otherRequestNote &&
             r.status !== "completed"
@@ -346,11 +286,8 @@ export default function TablePage() {
         <Card className="max-w-md mx-auto shadow-lg border-0">
           <CardHeader className="pb-4">
             <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
-              {tableData ? tableData.name : 'Loading...'}
-            </CardTitle>
-            <div className="text-center text-sm text-muted-foreground">
               How can we help you?
-            </div>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-2 gap-4">

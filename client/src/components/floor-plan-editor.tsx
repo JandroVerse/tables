@@ -367,9 +367,6 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
     queryKey: [`/api/restaurants/${restaurantId}/tables`],
-    onSuccess: (data) => {
-      console.log('Fetched tables:', data);
-    },
   });
 
   const { data: requests = [] } = useQuery<Request[]>({

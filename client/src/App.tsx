@@ -6,7 +6,6 @@ import TablePage from "@/pages/table";
 import AdminPage from "@/pages/admin";
 import QRPage from "@/pages/qr";
 import AuthPage from "@/pages/auth";
-import OnboardingPage from "@/pages/onboarding";
 import NotFound from "@/pages/not-found";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
@@ -14,16 +13,13 @@ import { ProtectedRoute } from "@/lib/protected-route";
 function Router() {
   return (
     <Switch>
-      {/* Public routes */}
-      <Route path="/table/:restaurantId/:tableId" component={TablePage} />
-
-      {/* Private routes */}
+      {/* Make sure this route comes before the redirect */}
+      <Route path="/request/:restaurantId/:tableId" component={TablePage} />
       <Route path="/">
         <Redirect to="/admin" />
       </Route>
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/admin" component={AdminPage} />
-      <ProtectedRoute path="/onboarding" component={OnboardingPage} />
       <ProtectedRoute path="/qr" component={QRPage} />
       <Route component={NotFound} />
     </Switch>

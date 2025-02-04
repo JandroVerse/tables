@@ -19,14 +19,12 @@ import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import type { Request, Table, Restaurant } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
 import { AnimatedBackground } from "@/components/animated-background";
-import { useAuth } from "@/hooks/use-auth";
-import { Loader2, LogOut } from "lucide-react";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -50,9 +48,6 @@ export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const form = useForm<CreateRestaurantForm>();
-  const [_, setLocation] = useLocation();
-  const { logoutMutation } = useAuth();
-
 
   useEffect(() => {
     wsService.connect();
@@ -124,6 +119,7 @@ export default function AdminPage() {
     },
   });
 
+  // Helper function to get table name
   const getTableName = (tableId: number) => {
     const table = tables.find(t => t.id === tableId);
     return table ? table.name : `Table ${tableId}`;
@@ -136,6 +132,7 @@ export default function AdminPage() {
     completed: "Completed",
   };
 
+  // Get the first restaurant for now (we can add restaurant switching later)
   const currentRestaurant = restaurants[0];
 
   const getSortedRequests = (status: string) => {
@@ -143,19 +140,14 @@ export default function AdminPage() {
       .filter((r) => r.status === status)
       .sort((a, b) => {
         if (status === "completed") {
+          // For completed requests, sort by completedAt in descending order (newest first)
           return new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime();
         } else {
+          // For other statuses, sort by createdAt in ascending order (oldest first)
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         }
       });
   };
-
-    useEffect(() => {
-        if (logoutMutation.isSuccess) {
-            setLocation("/auth");
-        }
-    }, [logoutMutation.isSuccess, setLocation]);
-
 
   const onSubmit = (data: CreateRestaurantForm) => {
     createRestaurant(data);
@@ -173,38 +165,21 @@ export default function AdminPage() {
         transition={{ duration: 0.5 }}
       >
         <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">
-              {currentRestaurant
-                ? `${currentRestaurant.name} Dashboard`
-                : "Restaurant Admin Dashboard"}
-            </h1>
-            <div className="flex gap-2">
-              <Link href="/qr">
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button variant="outline">View QR Codes</Button>
-                </motion.div>
-              </Link>
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button 
-                  variant="outline" 
-                  onClick={() => logoutMutation.mutate()}
-                  disabled={logoutMutation.isPending}
-                  className="hover:bg-destructive/10"
-                >
-                  {logoutMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <LogOut className="h-4 w-4 mr-2" />
-                  )}
-                  {logoutMutation.isPending ? "Logging out..." : "Logout"}
-                </Button>
-              </motion.div>
-            </div>
-          </div>
+          <h1 className="text-2xl font-bold">
+            {currentRestaurant 
+              ? `${currentRestaurant.name} Dashboard`
+              : "Restaurant Admin Dashboard"}
+          </h1>
+          <Link href="/qr">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button variant="outline">View QR Codes</Button>
+            </motion.div>
+          </Link>
+        </div>
 
-          {currentRestaurant ? (
-            <FloorPlanEditor restaurantId={currentRestaurant.id} />
-          ) : (
+        {currentRestaurant ? (
+          <FloorPlanEditor restaurantId={currentRestaurant.id} />
+        ) : (
           <Card>
             <CardHeader>
               <CardTitle>Create Your Restaurant</CardTitle>
