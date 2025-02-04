@@ -12,15 +12,9 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const sessionId = localStorage.getItem('sessionId');
-  const headers: Record<string, string> = {
-    ...(data ? { "Content-Type": "application/json" } : {}),
-    ...(sessionId ? { "X-Session-ID": sessionId } : {})
-  };
-
   const res = await fetch(url, {
     method,
-    headers,
+    headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -35,14 +29,8 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const sessionId = localStorage.getItem('sessionId');
-    const headers: Record<string, string> = {
-      ...(sessionId ? { "X-Session-ID": sessionId } : {})
-    };
-
     const res = await fetch(queryKey[0] as string, {
       credentials: "include",
-      headers
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

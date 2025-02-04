@@ -107,28 +107,28 @@ const DraggableTable = ({
   });
   const [resizing, setResizing] = useState(false);
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
-  const [hasLongWaitingRequest, setHasLongWaitingRequest] = useState(false);
+    const [hasLongWaitingRequest, setHasLongWaitingRequest] = useState(false);
 
-  useEffect(() => {
-    const checkLongWaitingRequests = () => {
-      const now = new Date().getTime();
-      const longWaitingRequest = activeRequests.some(request => {
-        if (request.status === "pending") {
-          const requestTime = new Date(request.createdAt).getTime();
-          const waitTime = now - requestTime;
-          return waitTime > 5 * 60 * 1000;
-        }
-        return false;
-      });
-      setHasLongWaitingRequest(longWaitingRequest);
-    };
+    useEffect(() => {
+        const checkLongWaitingRequests = () => {
+          const now = new Date().getTime();
+          const longWaitingRequest = activeRequests.some(request => {
+            if (request.status === "pending") {
+              const requestTime = new Date(request.createdAt).getTime();
+              const waitTime = now - requestTime;
+              return waitTime > 5 * 60 * 1000;
+            }
+            return false;
+          });
+          setHasLongWaitingRequest(longWaitingRequest);
+        };
 
-    checkLongWaitingRequests();
+        checkLongWaitingRequests();
 
-    const interval = setInterval(checkLongWaitingRequests, 30000);
+        const interval = setInterval(checkLongWaitingRequests, 30000);
 
-    return () => clearInterval(interval);
-  }, [activeRequests]);
+        return () => clearInterval(interval);
+      }, [activeRequests]);
 
   const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     if (!editMode) return;
@@ -362,7 +362,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   const [selectedShape, setSelectedShape] = useState<"square" | "round">("square");
   const [showRequestPreview, setShowRequestPreview] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [showGrid, setShowGrid] = useState(false);
+    const [showGrid, setShowGrid] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
@@ -374,13 +374,6 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests"],
-    queryFn: async () => {
-      if (!restaurantId) return [];
-      const res = await fetch(`/api/requests?restaurantId=${restaurantId}`);
-      if (!res.ok) throw new Error("Failed to fetch requests");
-      return res.json();
-    },
-    enabled: !!restaurantId,
   });
 
   const { mutate: updateTablePosition } = useMutation({
@@ -524,15 +517,15 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
               Edit Mode
             </Label>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2"
-            onClick={() => setShowGrid(!showGrid)}
-          >
-            <Grid className="h-4 w-4" />
-            {showGrid ? "Hide Grid" : "Show Grid"}
-          </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+              onClick={() => setShowGrid(!showGrid)}
+            >
+              <Grid className="h-4 w-4" />
+              {showGrid ? "Hide Grid" : "Show Grid"}
+            </Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -566,7 +559,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
               className="relative h-[600px] border rounded-lg bg-gray-50"
               onClick={() => setSelectedTable(null)}
             >
-              {showGrid && <GridBackground />}
+                {showGrid && <GridBackground />}
               {tables.map((table) => (
                 <DraggableTable
                   key={table.id}

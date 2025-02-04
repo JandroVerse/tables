@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 
@@ -7,8 +7,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   email: text("email").notNull(),
-  role: text("role", { enum: ["user", "admin"] }).notNull().default("user"),
-  isAdmin: boolean("is_admin").default(false).notNull(),
+  role: text("role", { enum: ["owner", "staff"] }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -20,6 +19,7 @@ export const restaurants = pgTable("restaurants", {
   phone: text("phone"),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const restaurantStaff = pgTable("restaurant_staff", {
@@ -36,22 +36,23 @@ export const tables = pgTable("tables", {
   restaurantId: integer("restaurant_id").references(() => restaurants.id).notNull(),
   name: text("name").notNull(),
   qrCode: text("qr_code").notNull(),
-  position: text("position").default(JSON.stringify({
+  position: jsonb("position").default({
     x: 0,
     y: 0,
     width: 100,
     height: 100,
     shape: "square"
-  })).notNull(),
+  }),
 });
 
 export const floorPlan = pgTable("floor_plan", {
   id: serial("id").primaryKey(),
   restaurantId: integer("restaurant_id").references(() => restaurants.id).notNull(),
   name: text("name").notNull(),
-  dimensions: text("dimensions").notNull(),
-  sections: text("sections").default('[]').notNull(),
+  dimensions: jsonb("dimensions").notNull(),
+  sections: jsonb("sections").default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const tableSessions = pgTable("table_sessions", {

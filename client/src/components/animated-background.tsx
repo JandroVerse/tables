@@ -55,7 +55,7 @@ export function AnimatedBackground() {
 
       {/* Enhanced floating particles */}
       <div className="absolute inset-0">
-        {[...Array(50)].map((_, i) => (
+        {[...Array(30)].map((_, i) => (
           <motion.div
             key={i}
             className="absolute w-3 h-3 rounded-full bg-primary/40"
@@ -64,15 +64,14 @@ export function AnimatedBackground() {
               top: `${Math.random() * 100}%`,
             }}
             animate={{
-              y: [0, -15, 0], // Even more reduced movement range
-              opacity: [0, 0.2, 0], // More subtle opacity
-              scale: [0.9, 1.05, 0.9], // More subtle scale changes
+              y: [0, -40, 0],
+              opacity: [0, 1, 0],
+              scale: [1, 1.5, 1],
             }}
             transition={{
-              duration: 25, // Much longer duration for very slow movement
+              duration: Math.random() * 4 + 3,
               repeat: Infinity,
-              ease: "linear", // Linear easing for smoother motion
-              delay: i * 0.8, // Even longer delay between particles
+              delay: Math.random() * 2,
             }}
           />
         ))}

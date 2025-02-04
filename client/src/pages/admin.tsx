@@ -1,20 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Link, useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
-import { Loader2, LogOut, Users } from "lucide-react";
-import { motion } from "framer-motion";
-import { FloorPlanEditor } from "@/components/floor-plan-editor";
-import { AnimatedBackground } from "@/components/animated-background";
-import { useToast } from "@/hooks/use-toast";
-import type { Request, Table, Restaurant } from "@db/schema";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
-import { useEffect } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { AnimatePresence } from "framer-motion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +17,26 @@ import {
 } from "@/components/ui/alert-dialog";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
+import { useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
+import type { Request, Table, Restaurant } from "@db/schema";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { motion, AnimatePresence } from "framer-motion";
+import { FloorPlanEditor } from "@/components/floor-plan-editor";
+import { AnimatedBackground } from "@/components/animated-background";
 
+const cardVariants = {
+  initial: { opacity: 0, scale: 0.95 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
+};
+
+const columnVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -20 }
+};
 
 interface CreateRestaurantForm {
   name: string;
@@ -40,36 +48,27 @@ export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const form = useForm<CreateRestaurantForm>();
-  const [_, setLocation] = useLocation();
-  const { logoutMutation, user } = useAuth();
-  const sessionId = 'someSessionId'; // Replace with actual session ID retrieval
+
+  useEffect(() => {
+    wsService.connect();
+    const unsubscribe = wsService.subscribe((data) => {
+      if (data.type === "new_request" || data.type === "update_request") {
+        refetch();
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const { data: restaurants = [], isLoading: isLoadingRestaurants } = useQuery<Restaurant[]>({
     queryKey: ["/api/restaurants"],
   });
 
-  const currentRestaurant = restaurants[0];
-
   const { data: requests = [], refetch } = useQuery<Request[]>({
-    queryKey: ["/api/requests", currentRestaurant?.id],
-    queryFn: async () => {
-      if (!currentRestaurant) return [];
-      const response = await fetch(`/api/requests?restaurantId=${currentRestaurant.id}&sessionId=${sessionId}`);
-      if (!response.ok) throw new Error('Failed to fetch requests');
-      return response.json();
-    },
-    enabled: !!currentRestaurant
+    queryKey: ["/api/requests"],
   });
 
   const { data: tables = [] } = useQuery<Table[]>({
-    queryKey: ["/api/restaurants", currentRestaurant?.id, "tables"],
-    queryFn: async () => {
-      if (!currentRestaurant) return [];
-      const response = await fetch(`/api/restaurants/${currentRestaurant.id}/tables`);
-      if (!response.ok) throw new Error('Failed to fetch tables');
-      return response.json();
-    },
-    enabled: !!currentRestaurant
+    queryKey: ["/api/tables"],
   });
 
   const { mutate: createRestaurant } = useMutation({
@@ -96,7 +95,7 @@ export default function AdminPage() {
 
   const { mutate: updateRequest } = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      return apiRequest("PATCH", `/api/requests/${id}`, { status, sessionId });
+      return apiRequest("PATCH", `/api/requests/${id}`, { status });
     },
     onSuccess: () => {
       refetch();
@@ -109,7 +108,7 @@ export default function AdminPage() {
 
   const { mutate: clearRequest } = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared", sessionId });
+      return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
     },
     onSuccess: () => {
       refetch();
@@ -120,6 +119,7 @@ export default function AdminPage() {
     },
   });
 
+  // Helper function to get table name
   const getTableName = (tableId: number) => {
     const table = tables.find(t => t.id === tableId);
     return table ? table.name : `Table ${tableId}`;
@@ -132,79 +132,26 @@ export default function AdminPage() {
     completed: "Completed",
   };
 
+  // Get the first restaurant for now (we can add restaurant switching later)
+  const currentRestaurant = restaurants[0];
+
   const getSortedRequests = (status: string) => {
-    console.log('Filtering requests:', { status, total: requests.length });
     return requests
-      .filter((r) => {
-        console.log('Request:', r);
-        return r.status === status;
-      })
+      .filter((r) => r.status === status)
       .sort((a, b) => {
         if (status === "completed") {
+          // For completed requests, sort by completedAt in descending order (newest first)
           return new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime();
         } else {
+          // For other statuses, sort by createdAt in ascending order (oldest first)
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         }
       });
   };
 
-  useEffect(() => {
-    if (logoutMutation.isSuccess) {
-      setLocation("/auth");
-    }
-  }, [logoutMutation.isSuccess, setLocation]);
-
-  useEffect(() => {
-    if (!sessionId || !currentRestaurant?.id) return;
-
-    // Connect to WebSocket
-    async function connectWebSocket() {
-      try {
-        await wsService.connect(sessionId);
-
-        // After successful connection, fetch initial data
-        refetch();
-      } catch (error) {
-        console.error('Failed to connect to WebSocket:', error);
-        toast({
-          title: "Connection Error",
-          description: "Failed to establish real-time connection. Please refresh the page.",
-          variant: "destructive",
-        });
-      }
-    }
-
-    connectWebSocket();
-
-    // Clean up on unmount
-    return () => {
-      wsService.disconnect();
-    };
-  }, [sessionId, currentRestaurant?.id, refetch, toast]);
-
   const onSubmit = (data: CreateRestaurantForm) => {
     createRestaurant(data);
   };
-
-  const cardVariants = {
-    initial: { opacity: 0, scale: 0.95 },
-    animate: { opacity: 1, scale: 1 },
-    exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
-  };
-
-  const columnVariants = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -20 }
-  };
-
-  if (isLoadingRestaurants) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen">
@@ -219,48 +166,19 @@ export default function AdminPage() {
       >
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">
-            {currentRestaurant
+            {currentRestaurant 
               ? `${currentRestaurant.name} Dashboard`
               : "Restaurant Admin Dashboard"}
           </h1>
-          <div className="flex gap-2">
-            {user?.isAdmin && (
-              <Link href="/admin/dashboard">
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button variant="outline" className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    Admin Dashboard
-                  </Button>
-                </motion.div>
-              </Link>
-            )}
-            <Link href="/qr">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button variant="outline">View QR Codes</Button>
-              </motion.div>
-            </Link>
+          <Link href="/qr">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button
-                variant="outline"
-                onClick={() => logoutMutation.mutate()}
-                disabled={logoutMutation.isPending}
-                className="hover:bg-destructive/10"
-              >
-                {logoutMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <LogOut className="h-4 w-4 mr-2" />
-                )}
-                {logoutMutation.isPending ? "Logging out..." : "Logout"}
-              </Button>
+              <Button variant="outline">View QR Codes</Button>
             </motion.div>
-          </div>
+          </Link>
         </div>
 
         {currentRestaurant ? (
-          <>
-            <FloorPlanEditor restaurantId={currentRestaurant.id} />
-          </>
+          <FloorPlanEditor restaurantId={currentRestaurant.id} />
         ) : (
           <Card>
             <CardHeader>
@@ -311,6 +229,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {statuses.map((status) => (
             <motion.div
