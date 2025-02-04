@@ -1,75 +1,159 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
 import { tables, requests, feedback, tableSessions, restaurants, users, restaurantStaff } from "@db/schema";
-import { eq, and } from "drizzle-orm";
-import QRCode from "qrcode";
+import { eq, and, SQL, PgColumn } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { setupAuth } from "./auth";
+import QRCode from "qrcode";
 
-// Keep track of WebSocket clients by session
-const clientsBySession = new Map<string, Set<WebSocket>>();
-
-// Keep track of client types
-const clientTypes = new Map<WebSocket, { 
-  type: 'customer' | 'admin';
+// WebSocket client tracking
+interface WebSocketClient {
+  ws: WebSocket;
   sessionId: string;
-}>();
+  lastPing: Date;
+}
+
+const clients = new Map<WebSocket, WebSocketClient>();
+const sessionClients = new Map<string, Set<WebSocket>>();
 
 function broadcastToSession(sessionId: string, message: any, excludeClient?: WebSocket) {
-  console.log(`Broadcasting to session ${sessionId}:`, message);
-  const clients = clientsBySession.get(sessionId);
+  const timestamp = new Date().toISOString();
+  const fullMessage = { ...message, timestamp, sessionId };
+
+  const clients = sessionClients.get(sessionId);
   if (clients) {
-    const messageStr = JSON.stringify(message);
-    console.log(`Found ${clients.size} clients for session ${sessionId}`);
-    clients.forEach((client) => {
+    const messageStr = JSON.stringify(fullMessage);
+    clients.forEach(client => {
       if (client !== excludeClient && client.readyState === WebSocket.OPEN) {
         try {
-          console.log('Sending to client with type:', clientTypes.get(client)?.type);
           client.send(messageStr);
         } catch (error) {
           console.error('Error sending message to client:', error);
         }
       }
     });
-  } else {
-    console.log(`No clients found for session ${sessionId}`);
   }
+}
+
+// Clean up inactive clients periodically
+function startCleanupInterval() {
+  setInterval(() => {
+    const now = new Date();
+    clients.forEach((client, ws) => {
+      if (now.getTime() - client.lastPing.getTime() > 70000) { // No ping for > 70 seconds
+        console.log(`Cleaning up inactive client for session ${client.sessionId}`);
+        ws.close();
+      }
+    });
+  }, 30000);
 }
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
+
   const wss = new WebSocketServer({
     server: httpServer,
+    path: '/ws',
     verifyClient: ({ req }) => {
       if (req.headers['sec-websocket-protocol'] === 'vite-hmr') {
         return false;
       }
-
       const url = new URL(req.url!, `http://${req.headers.host}`);
-      const sessionId = url.searchParams.get('sessionId');
-      const clientType = url.searchParams.get('clientType');
-      const sessionCookie = url.searchParams.get('sessionCookie');
-
-      console.log('WebSocket connection request:', {
-        sessionId,
-        clientType,
-        hasSessionCookie: !!sessionCookie
-      });
-
-      if (!sessionId || !clientType) {
-        console.log('WebSocket: Connection rejected - Missing required parameters');
-        return false;
-      }
-
-      (req as any).sessionId = sessionId;
-      (req as any).clientType = clientType;
-      (req as any).sessionCookie = sessionCookie;
-
-      return true;
+      return !!url.searchParams.get('sessionId');
     }
   });
+
+  wss.on('connection', async (ws: WebSocket, req: Request) => {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const sessionId = url.searchParams.get('sessionId')!;
+
+    console.log('New WebSocket connection:', { sessionId });
+
+    // Initialize client tracking
+    clients.set(ws, {
+      ws,
+      sessionId,
+      lastPing: new Date()
+    });
+
+    if (!sessionClients.has(sessionId)) {
+      sessionClients.set(sessionId, new Set());
+    }
+    sessionClients.get(sessionId)!.add(ws);
+
+    // Send initial connection confirmation
+    ws.send(JSON.stringify({
+      type: 'server_update',
+      action: 'connection_established',
+      timestamp: new Date().toISOString(),
+      sessionId,
+      data: { status: 'connected' }
+    }));
+
+    ws.on('message', async (data: string) => {
+      try {
+        const message = JSON.parse(data);
+        const client = clients.get(ws);
+
+        if (!client) {
+          console.error('Message received from untracked client');
+          return;
+        }
+
+        // Update last ping time
+        client.lastPing = new Date();
+
+        if (message.type === 'ping') {
+          ws.send(JSON.stringify({
+            type: 'pong',
+            timestamp: new Date().toISOString(),
+            sessionId
+          }));
+          return;
+        }
+
+        if (message.type === 'client_update') {
+          // Broadcast update to other clients in the same session
+          broadcastToSession(sessionId, message, ws);
+
+          // If this is a status update, store it in the database
+          if (message.data?.status) {
+            await db.update(tableSessions)
+              .set({ lastActivityAt: new Date() })
+              .where(eq(tableSessions.sessionId, sessionId));
+          }
+        }
+
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+        ws.send(JSON.stringify({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          sessionId,
+          error: 'Invalid message format'
+        }));
+      }
+    });
+
+    ws.on('close', () => {
+      const client = clients.get(ws);
+      if (client) {
+        const clientsForSession = sessionClients.get(client.sessionId);
+        if (clientsForSession) {
+          clientsForSession.delete(ws);
+          if (clientsForSession.size === 0) {
+            sessionClients.delete(client.sessionId);
+          }
+        }
+        clients.delete(ws);
+      }
+    });
+  });
+
+  // Start cleanup interval
+  startCleanupInterval();
 
   // Add request logging middleware
   app.use((req, res, next) => {
@@ -79,103 +163,6 @@ export function registerRoutes(app: Express): Server {
 
   // Setup authentication
   setupAuth(app);
-
-  wss.on("connection", async (ws: WebSocket, req: any) => {
-    const { sessionId, clientType, sessionCookie } = req;
-
-    console.log("WebSocket: New connection:", {
-      sessionId,
-      clientType,
-      hasSessionCookie: !!sessionCookie
-    });
-
-    if (!clientsBySession.has(sessionId)) {
-      clientsBySession.set(sessionId, new Set());
-    }
-    clientsBySession.get(sessionId)!.add(ws);
-
-    clientTypes.set(ws, {
-      type: clientType,
-      sessionId
-    });
-
-    try {
-      ws.send(JSON.stringify({
-        type: 'connection_status',
-        status: 'connected',
-        sessionId
-      }));
-    } catch (error) {
-      console.error('Error sending connection confirmation:', error);
-    }
-
-    ws.on("message", async (message: string) => {
-      try {
-        const data = JSON.parse(message.toString());
-        console.log('WebSocket: Received message:', data);
-
-        if (data.sessionId !== sessionId) {
-          console.error('WebSocket: Session ID mismatch');
-          return;
-        }
-
-        if (data.type === 'ping') {
-          try {
-            ws.send(JSON.stringify({
-              type: 'connection_status',
-              status: 'connected',
-              sessionId
-            }));
-          } catch (error) {
-            console.error('Error sending ping response:', error);
-          }
-          return;
-        }
-
-        if (data.type === 'admin_data_request' && clientType === 'admin') {
-          broadcastToSession(sessionId, data);
-          return;
-        }
-
-        if (data.type === 'admin_data_response' && clientType === 'customer') {
-          const admins = Array.from(clientsBySession.get(sessionId) || [])
-            .filter(client => clientTypes.get(client)?.type === 'admin');
-
-          admins.forEach(admin => {
-            if (admin.readyState === WebSocket.OPEN) {
-              try {
-                admin.send(JSON.stringify(data));
-              } catch (error) {
-                console.error('Error forwarding customer data to admin:', error);
-              }
-            }
-          });
-          return;
-        }
-
-        broadcastToSession(sessionId, data, ws);
-      } catch (error) {
-        console.error("WebSocket: Failed to process message:", error);
-      }
-    });
-
-    ws.on("close", () => {
-      console.log("WebSocket: Client disconnected:", {
-        sessionId,
-        clientType
-      });
-
-      const sessionClients = clientsBySession.get(sessionId);
-      if (sessionClients) {
-        sessionClients.delete(ws);
-        if (sessionClients.size === 0) {
-          clientsBySession.delete(sessionId);
-        }
-      }
-
-      clientTypes.delete(ws);
-    });
-  });
 
   app.post("/api/restaurants", ensureAuthenticated, async (req, res) => {
     const { name, address, phone } = req.body;
@@ -257,7 +244,7 @@ export function registerRoutes(app: Express): Server {
         .values({
           name,
           restaurantId: Number(restaurantId),
-          qrCode: '', 
+          qrCode: '',
           position,
         })
         .returning();
@@ -311,7 +298,7 @@ export function registerRoutes(app: Express): Server {
 
   app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
     const { restaurantId, tableId } = req.params;
-    const { position } = req.body;
+    const { position, sessionId } = req.body;
 
     const [restaurant] = await db.query.restaurants.findMany({
       where: and(
@@ -342,7 +329,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Table not found" });
       }
 
-      broadcastToSession(req.body.sessionId, {
+      broadcastToSession(sessionId, {
         type: "update_table",
         table: updatedTable
       });
@@ -355,7 +342,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.delete("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
-    const { restaurantId, tableId } = req.params;
+    const { restaurantId, tableId, sessionId } = req.params;
 
     const [restaurant] = await db.query.restaurants.findMany({
       where: and(
@@ -380,7 +367,7 @@ export function registerRoutes(app: Express): Server {
       return res.status(404).json({ message: "Table not found" });
     }
 
-    broadcastToSession(req.body.sessionId, {
+    broadcastToSession(sessionId, {
       type: "delete_table",
       tableId,
       restaurantId
@@ -524,6 +511,7 @@ export function registerRoutes(app: Express): Server {
 
       console.log(`Created request ${request.id} for table ${tableId}`);
 
+      // Broadcast to all clients in the session
       broadcastToSession(sessionId, { type: "new_request", request });
 
       res.json(request);
@@ -695,7 +683,7 @@ export function registerRoutes(app: Express): Server {
       res.json({ message: "User and all associated data deleted successfully", user: deletedUser });
     } catch (error) {
       console.error('Error in deletion process:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: "Failed to delete user and associated data",
         error: error instanceof Error ? error.message : String(error)
       });
@@ -736,7 +724,7 @@ async function getActiveTableSession(tableId: number) {
   return activeSession;
 }
 
-function ensureAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
+function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
     return next();
   }

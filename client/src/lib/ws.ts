@@ -1,252 +1,205 @@
 import { z } from "zod";
 import { useAuth } from "@/hooks/use-auth";
 
-type ServiceRequestListener = (data: any) => void;
+// Define strongly typed message schemas
+const BaseMessageSchema = z.object({
+  type: z.enum(['client_update', 'server_update', 'error', 'ping', 'pong']),
+  timestamp: z.string().datetime(),
+  sessionId: z.string(),
+});
 
-interface WebSocketMessage {
-  type: 'new_request' | 'update_request' | 'connection_status' | 'ping' | 'pong' | 'admin_data_request' | 'admin_data_response';
-  tableId?: number;
-  restaurantId?: number;
-  request?: any;
-  status?: 'connected' | 'disconnected' | 'reconnecting';
-  clientType?: 'customer' | 'admin';
-  data?: any;
-}
+const ClientUpdateSchema = BaseMessageSchema.extend({
+  type: z.literal('client_update'),
+  data: z.object({
+    tableId: z.number(),
+    restaurantId: z.number(),
+    status: z.enum(['active', 'inactive']),
+    lastActivity: z.string().datetime(),
+    currentRequests: z.array(z.object({
+      id: z.number(),
+      type: z.string(),
+      status: z.string(),
+      timestamp: z.string().datetime()
+    }))
+  })
+});
+
+const ServerUpdateSchema = BaseMessageSchema.extend({
+  type: z.literal('server_update'),
+  action: z.enum(['request_update', 'full_sync', 'error']),
+  targetTableId: z.number().optional(),
+  data: z.any()
+});
+
+type ClientMessage = z.infer<typeof ClientUpdateSchema>;
+type ServerMessage = z.infer<typeof ServerUpdateSchema>;
+type WebSocketMessage = ClientMessage | ServerMessage;
 
 class WebSocketService {
-    private ws: WebSocket | null = null;
-    private listeners: ServiceRequestListener[] = [];
-    private reconnectAttempts = 0;
-    private maxReconnectAttempts = 10;
-    private reconnectDelay = 2000;
-    private isConnected = false;
-    private connectionTimer: NodeJS.Timeout | null = null;
-    private sessionId: string | null = null;
-    private clientType: 'customer' | 'admin' = 'customer';
-    private pingInterval: NodeJS.Timeout | null = null;
+  private ws: WebSocket | null = null;
+  private messageQueue: WebSocketMessage[] = [];
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 1000;
+  private pingInterval: NodeJS.Timeout | null = null;
+  private listeners = new Map<string, Set<(data: any) => void>>();
+  private sessionId: string | null = null;
 
-    connect(sessionId: string, type: 'customer' | 'admin' = 'customer') {
-        if (!sessionId) {
-            console.error('WebSocket: Cannot connect without sessionId');
-            return;
-        }
+  constructor() {
+    this.handleMessage = this.handleMessage.bind(this);
+    this.handleClose = this.handleClose.bind(this);
+    this.handleError = this.handleError.bind(this);
+  }
 
-        // Clean up any existing connection
-        this.disconnect();
-
-        this.sessionId = sessionId;
-        this.clientType = type;
-
-        console.log('WebSocket: Connecting with session ID:', this.sessionId, 'type:', type);
-
-        try {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.host;
-            const wsUrl = new URL(`${protocol}//${host}/ws`);
-            wsUrl.searchParams.append('sessionId', this.sessionId);
-            wsUrl.searchParams.append('clientType', this.clientType);
-
-            // Get session cookie if it exists
-            const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-                const [key, value] = cookie.trim().split('=');
-                acc[key] = value;
-                return acc;
-            }, {} as Record<string, string>);
-
-            if (cookies['connect.sid']) {
-                wsUrl.searchParams.append('sessionCookie', cookies['connect.sid']);
-            }
-
-            console.log('WebSocket: Connecting to URL:', wsUrl.toString());
-            this.ws = new WebSocket(wsUrl.toString());
-
-            this.ws.onopen = () => {
-                console.log('WebSocket: Connection established');
-                this.isConnected = true;
-                this.reconnectAttempts = 0;
-                this.startPingInterval();
-                this.notifyListeners({
-                    type: 'connection_status',
-                    status: 'connected'
-                });
-            };
-
-            this.ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log('WebSocket: Received message:', data);
-
-                    if (data.type === 'ping') {
-                        this.send({ type: 'pong' });
-                        return;
-                    }
-
-                    // Special handling for admin data requests when in customer mode
-                    if (this.clientType === 'customer' && data.type === 'admin_data_request') {
-                        this.handleAdminDataRequest(data);
-                        return;
-                    }
-
-                    this.listeners.forEach(listener => listener(data));
-                } catch (error) {
-                    console.error('WebSocket: Error parsing message:', error);
-                }
-            };
-
-            this.ws.onclose = (event) => {
-                console.log('WebSocket: Connection closed', event);
-                this.isConnected = false;
-                this.ws = null;
-                this.stopPingInterval();
-                this.handleReconnect();
-            };
-
-            this.ws.onerror = (error) => {
-                console.error('WebSocket: Connection error:', error);
-                if (this.ws) {
-                    this.ws.close();
-                }
-            };
-        } catch (error) {
-            console.error('WebSocket: Failed to create connection:', error);
-            this.handleReconnect();
-        }
+  connect(sessionId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('WebSocket: Already connected');
+      return;
     }
 
-    private startPingInterval() {
-      this.stopPingInterval();
-      this.pingInterval = setInterval(() => {
-        if (this.isConnected) {
-          this.send({ type: 'ping' });
-        }
-      }, 30000); // Send ping every 30 seconds
-    }
+    this.sessionId = sessionId;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws?sessionId=${sessionId}`;
 
-    private stopPingInterval() {
-      if (this.pingInterval) {
-        clearInterval(this.pingInterval);
-        this.pingInterval = null;
-      }
-    }
+    console.log('WebSocket: Connecting to', wsUrl);
+    this.ws = new WebSocket(wsUrl);
 
-    private handleAdminDataRequest(data: WebSocketMessage) {
-      // When customer receives admin request, send back current state
-      if (this.clientType === 'customer' && this.sessionId) {
-        this.send({
-          type: 'admin_data_response',
-          tableId: data.tableId,
-          restaurantId: data.restaurantId,
-          data: {
-            lastUpdate: new Date().toISOString()
-          }
-        });
-      }
-    }
+    this.ws.onopen = this.handleOpen.bind(this);
+    this.ws.onmessage = this.handleMessage;
+    this.ws.onclose = this.handleClose;
+    this.ws.onerror = this.handleError;
+  }
 
-    private handleReconnect() {
-      if (this.connectionTimer) {
-        clearTimeout(this.connectionTimer);
-        this.connectionTimer = null;
-      }
+  private handleOpen() {
+    console.log('WebSocket: Connected');
+    this.reconnectAttempts = 0;
+    this.startPingInterval();
+    this.flushMessageQueue();
+    this.emit('connection', { status: 'connected' });
+  }
 
-      this.notifyListeners({
-        type: 'connection_status',
-        status: 'disconnected'
-      });
+  private handleMessage(event: MessageEvent) {
+    try {
+      const message = JSON.parse(event.data);
+      console.log('WebSocket: Received message', message);
 
-      if (this.reconnectAttempts < this.maxReconnectAttempts && this.sessionId) {
-        const delay = this.reconnectDelay * Math.min(Math.pow(2, this.reconnectAttempts), 10);
-        console.log(`WebSocket: Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}) in ${delay}ms`);
-
-        this.notifyListeners({
-          type: 'connection_status',
-          status: 'reconnecting'
-        });
-
-        this.reconnectAttempts++;
-        this.connectionTimer = setTimeout(() => {
-          if (this.sessionId) {
-            this.connect(this.sessionId, this.clientType);
-          }
-        }, delay);
-      } else {
-        console.error('WebSocket: Max reconnection attempts reached');
-      }
-    }
-
-    send(message: WebSocketMessage) {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        console.error('WebSocket: Cannot send message - connection not open');
+      if (message.type === 'ping') {
+        this.send({ type: 'pong', timestamp: new Date().toISOString(), sessionId: this.sessionId! });
         return;
       }
 
-      const messageWithSession = {
-        ...message,
-        sessionId: this.sessionId,
-        clientType: this.clientType
-      };
-
-      console.log('WebSocket: Sending message:', messageWithSession);
+      // Validate message against schema
       try {
-        this.ws.send(JSON.stringify(messageWithSession));
-      } catch (error) {
-        console.error('WebSocket: Error sending message:', error);
-        this.ws.close();
-      }
-    }
-
-    subscribe(listener: ServiceRequestListener) {
-      console.log('WebSocket: New listener subscribed');
-      this.listeners.push(listener);
-      return () => {
-        this.listeners = this.listeners.filter(l => l !== listener);
-        console.log('WebSocket: Listener unsubscribed');
-      };
-    }
-
-    disconnect() {
-      console.log('WebSocket: Disconnecting...');
-      this.stopPingInterval();
-      if (this.connectionTimer) {
-        clearTimeout(this.connectionTimer);
-        this.connectionTimer = null;
-      }
-      if (this.ws) {
-        this.ws.close();
-        this.ws = null;
-      }
-      this.isConnected = false;
-      this.reconnectAttempts = 0;
-      this.sessionId = null;
-      this.notifyListeners({
-        type: 'connection_status',
-        status: 'disconnected'
-      });
-    }
-
-    private notifyListeners(message: WebSocketMessage) {
-      this.listeners.forEach(listener => {
-        try {
-          listener(message);
-        } catch (error) {
-          console.error('WebSocket: Error in listener:', error);
+        if (message.type === 'server_update') {
+          ServerUpdateSchema.parse(message);
+        } else if (message.type === 'client_update') {
+          ClientUpdateSchema.parse(message);
         }
-      });
-    }
-
-    // Method for admin to request data from customer
-    requestCustomerData(tableId: number, restaurantId: number) {
-      if (this.clientType !== 'admin') {
-        console.error('WebSocket: Only admin can request customer data');
+      } catch (error) {
+        console.error('WebSocket: Invalid message format', error);
         return;
       }
 
-      this.send({
-        type: 'admin_data_request',
-        tableId,
-        restaurantId
-      });
+      // Emit to all relevant listeners
+      this.emit(message.type, message);
+      if (message.action) {
+        this.emit(`${message.type}:${message.action}`, message);
+      }
+    } catch (error) {
+      console.error('WebSocket: Error processing message', error);
     }
+  }
+
+  private handleClose(event: CloseEvent) {
+    console.log('WebSocket: Connection closed', event);
+    this.stopPingInterval();
+    this.emit('connection', { status: 'disconnected' });
+
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
+      console.log(`WebSocket: Reconnecting in ${delay}ms`);
+      this.reconnectAttempts++;
+      setTimeout(() => this.connect(this.sessionId!), delay);
+    }
+  }
+
+  private handleError(error: Event) {
+    console.error('WebSocket: Error', error);
+    this.emit('error', { error });
+  }
+
+  private startPingInterval() {
+    this.stopPingInterval();
+    this.pingInterval = setInterval(() => {
+      this.send({
+        type: 'ping',
+        timestamp: new Date().toISOString(),
+        sessionId: this.sessionId!
+      });
+    }, 30000);
+  }
+
+  private stopPingInterval() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+  }
+
+  private flushMessageQueue() {
+    while (this.messageQueue.length > 0) {
+      const message = this.messageQueue.shift();
+      if (message) this.send(message);
+    }
+  }
+
+  send(message: WebSocketMessage) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.log('WebSocket: Queueing message', message);
+      this.messageQueue.push(message);
+      return;
+    }
+
+    try {
+      this.ws.send(JSON.stringify(message));
+    } catch (error) {
+      console.error('WebSocket: Error sending message', error);
+      this.messageQueue.push(message);
+    }
+  }
+
+  on(event: string, callback: (data: any) => void) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(callback);
+    return () => this.off(event, callback);
+  }
+
+  off(event: string, callback: (data: any) => void) {
+    this.listeners.get(event)?.delete(callback);
+  }
+
+  private emit(event: string, data: any) {
+    this.listeners.get(event)?.forEach(callback => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error('WebSocket: Error in listener', error);
+      }
+    });
+  }
+
+  disconnect() {
+    this.stopPingInterval();
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.sessionId = null;
+    this.messageQueue = [];
+    this.listeners.clear();
+  }
 }
 
 export const wsService = new WebSocketService();

@@ -266,20 +266,7 @@ export default function TablePage() {
     enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData && !!restaurantId && !isNaN(restaurantId),
   });
 
-  const handleWaterRequest = () => {
-    console.log('Water request initiated:', {
-      waterCount,
-      tableId,
-      restaurantId,
-      sessionId
-    });
-
-    createRequest({
-      type: "water",
-      notes: `${waterCount} water${waterCount > 1 ? "s" : ""}`,
-    });
-  };
-
+  // The key mutation that creates requests
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
       console.log('Creating request: Starting mutation', { type, notes, tableId, restaurantId, sessionId });
@@ -356,6 +343,21 @@ export default function TablePage() {
       });
     },
   });
+
+  // Example usage - Water Request
+  const handleWaterRequest = () => {
+    console.log('Water request initiated:', {
+      waterCount,
+      tableId,
+      restaurantId,
+      sessionId
+    });
+
+    createRequest({
+      type: "water",
+      notes: `${waterCount} water${waterCount > 1 ? "s" : ""}`,
+    });
+  };
 
   const handleWaiterRequest = () => {
     console.log('Waiter request initiated:', {
