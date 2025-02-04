@@ -130,6 +130,29 @@ export function registerRoutes(app: Express): Server {
           return;
         }
 
+        // Handle admin data requests
+        if (data.type === 'admin_data_request' && clientType === 'admin') {
+          // Forward the request to all customers in the session
+          broadcastToSession(sessionId, data);
+          return;
+        }
+
+        // Handle customer data responses
+        if (data.type === 'admin_data_response' && clientType === 'customer') {
+          // Forward the response to all admins in the session
+          const admins = Array.from(clientsBySession.get(sessionId) || [])
+            .filter(client => clientTypes.get(client)?.type === 'admin');
+
+          admins.forEach(admin => {
+            try {
+              admin.send(JSON.stringify(data));
+            } catch (error) {
+              console.error('Error forwarding customer data to admin:', error);
+            }
+          });
+          return;
+        }
+
         broadcastToSession(sessionId, data, ws);
       } catch (error) {
         console.error("WebSocket: Failed to process message:", error);

@@ -52,17 +52,7 @@ export default function AdminPage() {
   const form = useForm<CreateRestaurantForm>();
   const [_, setLocation] = useLocation();
   const { logoutMutation } = useAuth();
-
-
-  useEffect(() => {
-    wsService.connect();
-    const unsubscribe = wsService.subscribe((data) => {
-      if (data.type === "new_request" || data.type === "update_request") {
-        refetch();
-      }
-    });
-    return () => unsubscribe();
-  }, []);
+  const sessionId = 'someSessionId'; // Replace with actual session ID retrieval
 
   const { data: restaurants = [], isLoading: isLoadingRestaurants } = useQuery<Restaurant[]>({
     queryKey: ["/api/restaurants"],
@@ -150,11 +140,41 @@ export default function AdminPage() {
       });
   };
 
-    useEffect(() => {
-        if (logoutMutation.isSuccess) {
-            setLocation("/auth");
-        }
-    }, [logoutMutation.isSuccess, setLocation]);
+  useEffect(() => {
+    if (logoutMutation.isSuccess) {
+      setLocation("/auth");
+    }
+  }, [logoutMutation.isSuccess, setLocation]);
+
+  useEffect(() => {
+    wsService.connect(sessionId || 'admin-session', 'admin');
+    const unsubscribe = wsService.subscribe((data) => {
+      if (data.type === "new_request" || data.type === "update_request") {
+        refetch();
+      } else if (data.type === 'admin_data_response') {
+        console.log('Received customer data:', data);
+        // Handle customer data response here
+        toast({
+          title: "Customer Update",
+          description: `Table ${data.tableId} last updated at ${new Date(data.data.lastUpdate).toLocaleTimeString()}`,
+        });
+      }
+    });
+
+    // Request customer data every 30 seconds
+    const dataRequestInterval = setInterval(() => {
+      tables.forEach(table => {
+        wsService.requestCustomerData(table.id, table.restaurantId);
+      });
+    }, 30000);
+
+    return () => {
+      console.log('Cleaning up WebSocket connection');
+      clearInterval(dataRequestInterval);
+      unsubscribe();
+      wsService.disconnect();
+    };
+  }, [tables]);
 
 
   const onSubmit = (data: CreateRestaurantForm) => {
@@ -202,9 +222,9 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {currentRestaurant ? (
-            <FloorPlanEditor restaurantId={currentRestaurant.id} />
-          ) : (
+        {currentRestaurant ? (
+          <FloorPlanEditor restaurantId={currentRestaurant.id} />
+        ) : (
           <Card>
             <CardHeader>
               <CardTitle>Create Your Restaurant</CardTitle>

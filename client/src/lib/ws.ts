@@ -3,12 +3,13 @@ import { z } from "zod";
 type ServiceRequestListener = (data: any) => void;
 
 interface WebSocketMessage {
-  type: 'new_request' | 'update_request' | 'connection_status' | 'ping';
+  type: 'new_request' | 'update_request' | 'connection_status' | 'ping' | 'admin_data_request' | 'admin_data_response';
   tableId?: number;
   restaurantId?: number;
   request?: any;
   status?: 'connected' | 'disconnected' | 'reconnecting';
   clientType?: 'customer' | 'admin';
+  data?: any;
 }
 
 class WebSocketService {
@@ -65,6 +66,13 @@ class WebSocketService {
           try {
             const data = JSON.parse(event.data);
             console.log('WebSocket: Received message:', data);
+
+            // Special handling for admin data requests when in customer mode
+            if (this.clientType === 'customer' && data.type === 'admin_data_request') {
+              this.handleAdminDataRequest(data);
+              return;
+            }
+
             this.listeners.forEach(listener => listener(data));
           } catch (error) {
             console.error('WebSocket: Error parsing message:', error);
@@ -87,6 +95,20 @@ class WebSocketService {
       } catch (error) {
         console.error('WebSocket: Failed to create connection:', error);
         this.handleReconnect();
+      }
+    }
+
+    private handleAdminDataRequest(data: WebSocketMessage) {
+      // When customer receives admin request, send back current state
+      if (this.clientType === 'customer' && this.sessionId) {
+        this.send({
+          type: 'admin_data_response',
+          tableId: data.tableId,
+          restaurantId: data.restaurantId,
+          data: {
+            lastUpdate: new Date().toISOString()
+          }
+        });
       }
     }
 
@@ -171,6 +193,20 @@ class WebSocketService {
 
     private notifyListeners(message: WebSocketMessage) {
       this.listeners.forEach(listener => listener(message));
+    }
+
+    // Method for admin to request data from customer
+    requestCustomerData(tableId: number, restaurantId: number) {
+      if (this.clientType !== 'admin') {
+        console.error('WebSocket: Only admin can request customer data');
+        return;
+      }
+
+      this.send({
+        type: 'admin_data_request',
+        tableId,
+        restaurantId
+      });
     }
 }
 
