@@ -202,12 +202,13 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Table not found" });
       }
 
-      // Check for active session
+      // Check for active session - explicitly check endedAt is null
       const activeSession = await db.query.tableSessions.findFirst({
         where: and(
           eq(tableSessions.tableId, Number(tableId)),
           isNull(tableSessions.endedAt)
         ),
+        orderBy: (sessions, { desc }) => [desc(sessions.startedAt)],
       });
 
       // Calculate session expiry
@@ -238,7 +239,7 @@ export function registerRoutes(app: Express): Server {
           });
         }
       } else {
-        // No active session
+        // No active session found
         res.json({ valid: true, table, requiresNewSession: true });
       }
     } catch (error) {
