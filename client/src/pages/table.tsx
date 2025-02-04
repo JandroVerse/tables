@@ -120,7 +120,7 @@ export default function TablePage() {
             id: session.sessionId,
             expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
           }));
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
         })
         .catch((error) => {
           console.error("Failed to verify table or create session:", error);
@@ -141,14 +141,14 @@ export default function TablePage() {
     wsService.connect();
     const unsubscribe = wsService.subscribe((data) => {
       if (data.type === "new_request" || data.type === "update_request") {
-        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       }
     });
     return () => unsubscribe();
-  }, [tableId, queryClient]);
+  }, [tableId, queryClient, restaurantId]);
 
   const { data: requests = [] } = useQuery<Request[]>({
-    queryKey: ["/api/requests", tableId],
+    queryKey: ["/api/requests", tableId, restaurantId],
     queryFn: async () => {
       if (!sessionId) return [];
       const res = await fetch(`/api/requests?tableId=${tableId}&restaurantId=${restaurantId}&sessionId=${sessionId}`);
@@ -159,34 +159,56 @@ export default function TablePage() {
         tableName: tableData?.name
       }));
     },
-    enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData,
+    enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData && !!restaurantId && !isNaN(restaurantId),
   });
 
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
       if (!sessionId) throw new Error("No active session");
-      const response = await apiRequest("POST", "/api/requests", {
+      if (!restaurantId || !tableId) {
+        throw new Error("Invalid table or restaurant");
+      }
+
+      console.log('Attempting to create request:', {
         tableId,
         restaurantId,
+        sessionId,
+        type,
+        notes
+      });
+
+      const response = await apiRequest("POST", "/api/requests", {
+        tableId: Number(tableId),
+        restaurantId: Number(restaurantId),
+        sessionId,
         type,
         notes,
-        sessionId,
       });
-      return response.json();
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to create request:', errorText);
+        throw new Error(errorText || "Failed to create request");
+      }
+
+      const data = await response.json();
+      console.log('Successfully created request:', data);
+      return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       setOtherRequestNote("");
       setIsDialogOpen(false);
       toast({
         title: "Request sent",
         description: "Staff has been notified of your request.",
       });
+      console.log('Request created successfully:', data);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to send request. Please try again.",
+        description: error.message || "Failed to send request. Please try again.",
         variant: "destructive",
       });
       console.error("Failed to create request:", error);
@@ -198,7 +220,7 @@ export default function TablePage() {
       return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
       toast({
         title: "Request cancelled",
         description: "Your request has been cancelled successfully.",
