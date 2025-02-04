@@ -156,7 +156,7 @@ export function registerRoutes(app: Express): Server {
 
       // Generate QR code with full URL - updated to use the correct route
       const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-      const tableUrl = `${protocol}://${domain}/table/${restaurantId}/${table.id}`;
+      const tableUrl = `${protocol}://${domain}/request/${restaurantId}/${table.id}`;
       console.log('Generating QR code for URL:', tableUrl);
 
       const qrCodeSvg = await QRCode.toString(tableUrl, { 
