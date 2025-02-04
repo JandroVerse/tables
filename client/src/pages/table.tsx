@@ -109,9 +109,16 @@ export default function TablePage() {
 
     const unsubscribe = wsService.subscribe((data) => {
       console.log('Received WebSocket message:', data);
-      if ((data.type === "new_request" || data.type === "update_request") && 
-          data.tableId === tableId) {
-        console.log('Received relevant request update, refreshing...');
+
+      // Handle different types of updates
+      if (data.type === "new_request" && data.tableId === tableId) {
+        console.log('New request received, refreshing...');
+        queryClient.invalidateQueries({ 
+          queryKey: ["/api/requests", tableId],
+          exact: true 
+        });
+      } else if (data.type === "update_request" && data.tableId === tableId) {
+        console.log('Request updated, refreshing...');
         queryClient.invalidateQueries({ 
           queryKey: ["/api/requests", tableId],
           exact: true 
@@ -119,6 +126,7 @@ export default function TablePage() {
       }
     });
 
+    // Cleanup function
     return () => {
       console.log('Cleaning up WebSocket connection...');
       unsubscribe();
@@ -126,7 +134,7 @@ export default function TablePage() {
     };
   }, [tableId, queryClient]);
 
-  const { data: requests = [] } = useQuery<Request[]>({
+  const { data: requests = [], refetch: refetchRequests } = useQuery<Request[]>({
     queryKey: ["/api/requests", tableId],
     queryFn: async () => {
       if (!sessionId) return [];
@@ -138,7 +146,8 @@ export default function TablePage() {
     // Add some options to make updates more responsive
     refetchOnWindowFocus: true,
     refetchOnMount: true,
-    staleTime: 0
+    staleTime: 0,
+    refetchInterval: 5000 // Polling fallback every 5 seconds
   });
 
   const { mutate: createRequest } = useMutation({
