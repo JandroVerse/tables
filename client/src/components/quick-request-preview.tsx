@@ -5,6 +5,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "./ui/alert-dialog";
 import { Button } from "./ui/button";
 import { GlassWater, Bell, Receipt, MessageSquare } from "lucide-react";
 import { motion } from "framer-motion";
@@ -54,6 +65,36 @@ export function QuickRequestPreview({ table, activeRequests, open, onClose }: Qu
         title: "Request updated",
         description: "The request status has been updated.",
       });
+    },
+  });
+
+  const { mutate: endSession } = useMutation({
+    mutationFn: async () => {
+      if (!table) throw new Error("No table selected");
+      const activeSession = await fetch(`/api/restaurants/${table.restaurantId}/tables/${table.id}/verify`).then(r => r.json());
+      if (!activeSession.activeSession) throw new Error("No active session");
+
+      return apiRequest(
+        "POST",
+        `/api/restaurants/${table.restaurantId}/tables/${table.id}/sessions/end`,
+        { sessionId: activeSession.activeSession.id }
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/requests"] });
+      toast({
+        title: "Session Ended",
+        description: "Table session has been closed successfully.",
+      });
+      onClose();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to end session. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Failed to end session:", error);
     },
   });
 
@@ -124,6 +165,34 @@ export function QuickRequestPreview({ table, activeRequests, open, onClose }: Qu
               </motion.div>
             ))
           )}
+
+          {/* Add End Session Button */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="destructive"
+                className="w-full mt-4"
+              >
+                End Table Session
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>End Table Session?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will end the current table session. All members will be disconnected and a new session will be required for future requests.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => endSession()}
+                >
+                  Yes, End Session
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </DialogContent>
     </Dialog>
