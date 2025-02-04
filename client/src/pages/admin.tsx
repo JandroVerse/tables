@@ -58,6 +58,8 @@ export default function AdminPage() {
     queryKey: ["/api/restaurants"],
   });
 
+  const currentRestaurant = restaurants[0];
+
   const { data: requests = [], refetch } = useQuery<Request[]>({
     queryKey: ["/api/requests", currentRestaurant?.id],
     queryFn: async () => {
@@ -104,7 +106,7 @@ export default function AdminPage() {
 
   const { mutate: updateRequest } = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      return apiRequest("PATCH", `/api/requests/${id}`, { status });
+      return apiRequest("PATCH", `/api/requests/${id}`, { status, sessionId });
     },
     onSuccess: () => {
       refetch();
@@ -117,7 +119,7 @@ export default function AdminPage() {
 
   const { mutate: clearRequest } = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
+      return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared", sessionId });
     },
     onSuccess: () => {
       refetch();
@@ -139,8 +141,6 @@ export default function AdminPage() {
     in_progress: "In Progress",
     completed: "Completed",
   };
-
-  const currentRestaurant = restaurants[0];
 
   const getSortedRequests = (status: string) => {
     console.log('Filtering requests:', { status, total: requests.length });
@@ -194,10 +194,17 @@ export default function AdminPage() {
     };
   }, [tables]);
 
-
   const onSubmit = (data: CreateRestaurantForm) => {
     createRestaurant(data);
   };
+
+  if (isLoadingRestaurants) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -211,34 +218,34 @@ export default function AdminPage() {
         transition={{ duration: 0.5 }}
       >
         <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">
-              {currentRestaurant
-                ? `${currentRestaurant.name} Dashboard`
-                : "Restaurant Admin Dashboard"}
-            </h1>
-            <div className="flex gap-2">
-              <Link href="/qr">
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button variant="outline">View QR Codes</Button>
-                </motion.div>
-              </Link>
+          <h1 className="text-2xl font-bold">
+            {currentRestaurant
+              ? `${currentRestaurant.name} Dashboard`
+              : "Restaurant Admin Dashboard"}
+          </h1>
+          <div className="flex gap-2">
+            <Link href="/qr">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button 
-                  variant="outline" 
-                  onClick={() => logoutMutation.mutate()}
-                  disabled={logoutMutation.isPending}
-                  className="hover:bg-destructive/10"
-                >
-                  {logoutMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <LogOut className="h-4 w-4 mr-2" />
-                  )}
-                  {logoutMutation.isPending ? "Logging out..." : "Logout"}
-                </Button>
+                <Button variant="outline">View QR Codes</Button>
               </motion.div>
-            </div>
+            </Link>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button 
+                variant="outline" 
+                onClick={() => logoutMutation.mutate()}
+                disabled={logoutMutation.isPending}
+                className="hover:bg-destructive/10"
+              >
+                {logoutMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4 mr-2" />
+                )}
+                {logoutMutation.isPending ? "Logging out..." : "Logout"}
+              </Button>
+            </motion.div>
           </div>
+        </div>
 
         {currentRestaurant ? (
           <FloorPlanEditor restaurantId={currentRestaurant.id} />
