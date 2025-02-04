@@ -118,16 +118,28 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
+      // Validate username uniqueness
       const [existingUser] = await getUserByUsername(req.body.username);
       if (existingUser) {
         return res.status(400).send("Username already exists");
       }
 
+      // Validate role
+      const role = req.body.role || "user";
+      if (!["user", "admin"].includes(role)) {
+        return res.status(400).send("Invalid role. Must be either 'user' or 'admin'");
+      }
+
+      // Create user with new fields
       const [user] = await db
         .insert(usersTable)
         .values({
-          ...req.body,
+          username: req.body.username,
           password: await hashPassword(req.body.password),
+          email: req.body.email || null, // Optional email
+          role: role,
+          isActive: true, // Default to active
+          // createdAt and updatedAt are handled by default values
         })
         .returning();
 
