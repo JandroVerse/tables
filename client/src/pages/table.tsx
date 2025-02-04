@@ -139,12 +139,24 @@ export default function TablePage() {
 
   useEffect(() => {
     wsService.connect();
+    console.log('Connecting to WebSocket service...');
+
     const unsubscribe = wsService.subscribe((data) => {
+      console.log('Received WebSocket message:', data);
       if (data.type === "new_request" || data.type === "update_request") {
-        queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
+        console.log('Invalidating requests query...');
+        queryClient.invalidateQueries({ 
+          queryKey: ["/api/requests", tableId, restaurantId],
+          exact: true 
+        });
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      console.log('Cleaning up WebSocket connection...');
+      unsubscribe();
+      wsService.disconnect();
+    };
   }, [tableId, queryClient, restaurantId]);
 
   const { data: requests = [] } = useQuery<Request[]>({
