@@ -113,8 +113,8 @@ export default function TablePage() {
 
     const sessionData = {
       sessionId: sessionInputValue,
-      startedAt: new Date().toISOString(), 
-      isCreator: false 
+      startedAt: new Date().toISOString(),
+      isCreator: false
     };
     localStorage.setItem(
       `table_session_${tableId}`,
@@ -175,7 +175,7 @@ export default function TablePage() {
             setCurrentSessionId(session.sessionId);
             setSessionId(session.sessionId);
             setIsSessionCreator(true);
-            setSessionTimeRemaining(60 * 60 * 1000); 
+            setSessionTimeRemaining(60 * 60 * 1000);
             queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
             toast({
               title: "Session Created",
@@ -238,6 +238,10 @@ export default function TablePage() {
           queryKey: ["/api/requests", tableId],
           exact: true
         });
+      } else if (data.type === "end_session" && data.tableId === tableId) {
+        // Handle session end event
+        localStorage.removeItem(`table_session_${tableId}`);
+        window.location.reload();
       }
     });
 
@@ -259,7 +263,7 @@ export default function TablePage() {
     refetchOnWindowFocus: true,
     refetchOnMount: true,
     staleTime: 0,
-    refetchInterval: 5000 
+    refetchInterval: 5000
   });
 
   const hasActiveRequest = (type: string) => {
@@ -360,7 +364,7 @@ export default function TablePage() {
     mutationFn: async () => {
       if (!sessionId) throw new Error("No active session");
       const response = await apiRequest(
-        "POST", 
+        "POST",
         `/api/restaurants/${restaurantId}/tables/${tableId}/sessions/end`,
         { sessionId }
       );
@@ -892,5 +896,5 @@ export default function TablePage() {
 }
 
 interface RequestWithTable extends Request {
-  table?: Table; 
+  table?: Table;
 }
