@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 type ServiceRequestListener = (data: any) => void;
 
 interface WebSocketMessage {
-  type: 'new_request' | 'update_request' | 'connection_status' | 'ping' | 'admin_data_request' | 'admin_data_response';
+  type: 'new_request' | 'update_request' | 'connection_status' | 'ping' | 'pong' | 'admin_data_request' | 'admin_data_response';
   tableId?: number;
   restaurantId?: number;
   request?: any;
@@ -26,80 +26,91 @@ class WebSocketService {
     private pingInterval: NodeJS.Timeout | null = null;
 
     connect(sessionId: string, type: 'customer' | 'admin' = 'customer') {
-      if (!sessionId) {
-        console.error('WebSocket: Cannot connect without sessionId');
-        return;
-      }
+        if (!sessionId) {
+            console.error('WebSocket: Cannot connect without sessionId');
+            return;
+        }
 
-      // Clean up any existing connection
-      this.disconnect();
+        // Clean up any existing connection
+        this.disconnect();
 
-      this.sessionId = sessionId;
-      this.clientType = type;
+        this.sessionId = sessionId;
+        this.clientType = type;
 
-      console.log('WebSocket: Connecting with session ID:', this.sessionId, 'type:', type);
+        console.log('WebSocket: Connecting with session ID:', this.sessionId, 'type:', type);
 
-      try {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.host;
-        const wsUrl = new URL(`${protocol}//${host}/ws`);
-        wsUrl.searchParams.append('sessionId', this.sessionId);
-        wsUrl.searchParams.append('clientType', this.clientType);
+        try {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            const wsUrl = new URL(`${protocol}//${host}/ws`);
+            wsUrl.searchParams.append('sessionId', this.sessionId);
+            wsUrl.searchParams.append('clientType', this.clientType);
 
-        console.log('WebSocket: Connecting to URL:', wsUrl.toString());
-        this.ws = new WebSocket(wsUrl.toString());
+            // Get session cookie if it exists
+            const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+                const [key, value] = cookie.trim().split('=');
+                acc[key] = value;
+                return acc;
+            }, {} as Record<string, string>);
 
-        this.ws.onopen = () => {
-          console.log('WebSocket: Connection established');
-          this.isConnected = true;
-          this.reconnectAttempts = 0;
-          this.startPingInterval();
-          this.notifyListeners({
-            type: 'connection_status',
-            status: 'connected'
-          });
-        };
-
-        this.ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            console.log('WebSocket: Received message:', data);
-
-            if (data.type === 'ping') {
-              this.send({ type: 'pong' });
-              return;
+            if (cookies['connect.sid']) {
+                wsUrl.searchParams.append('sessionCookie', cookies['connect.sid']);
             }
 
-            // Special handling for admin data requests when in customer mode
-            if (this.clientType === 'customer' && data.type === 'admin_data_request') {
-              this.handleAdminDataRequest(data);
-              return;
-            }
+            console.log('WebSocket: Connecting to URL:', wsUrl.toString());
+            this.ws = new WebSocket(wsUrl.toString());
 
-            this.listeners.forEach(listener => listener(data));
-          } catch (error) {
-            console.error('WebSocket: Error parsing message:', error);
-          }
-        };
+            this.ws.onopen = () => {
+                console.log('WebSocket: Connection established');
+                this.isConnected = true;
+                this.reconnectAttempts = 0;
+                this.startPingInterval();
+                this.notifyListeners({
+                    type: 'connection_status',
+                    status: 'connected'
+                });
+            };
 
-        this.ws.onclose = (event) => {
-          console.log('WebSocket: Connection closed', event);
-          this.isConnected = false;
-          this.ws = null;
-          this.stopPingInterval();
-          this.handleReconnect();
-        };
+            this.ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('WebSocket: Received message:', data);
 
-        this.ws.onerror = (error) => {
-          console.error('WebSocket: Connection error:', error);
-          if (this.ws) {
-            this.ws.close();
-          }
-        };
-      } catch (error) {
-        console.error('WebSocket: Failed to create connection:', error);
-        this.handleReconnect();
-      }
+                    if (data.type === 'ping') {
+                        this.send({ type: 'pong' });
+                        return;
+                    }
+
+                    // Special handling for admin data requests when in customer mode
+                    if (this.clientType === 'customer' && data.type === 'admin_data_request') {
+                        this.handleAdminDataRequest(data);
+                        return;
+                    }
+
+                    this.listeners.forEach(listener => listener(data));
+                } catch (error) {
+                    console.error('WebSocket: Error parsing message:', error);
+                }
+            };
+
+            this.ws.onclose = (event) => {
+                console.log('WebSocket: Connection closed', event);
+                this.isConnected = false;
+                this.ws = null;
+                this.stopPingInterval();
+                this.handleReconnect();
+            };
+
+            this.ws.onerror = (error) => {
+                console.error('WebSocket: Connection error:', error);
+                if (this.ws) {
+                    this.ws.close();
+                }
+            };
+        } catch (error) {
+            console.error('WebSocket: Failed to create connection:', error);
+            this.handleReconnect();
+        }
     }
 
     private startPingInterval() {

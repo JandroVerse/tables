@@ -50,10 +50,12 @@ export function registerRoutes(app: Express): Server {
       const url = new URL(req.url!, `http://${req.headers.host}`);
       const sessionId = url.searchParams.get('sessionId');
       const clientType = url.searchParams.get('clientType');
+      const sessionCookie = url.searchParams.get('sessionCookie');
 
       console.log('WebSocket connection request:', {
         sessionId,
-        clientType
+        clientType,
+        hasSessionCookie: !!sessionCookie
       });
 
       if (!sessionId || !clientType) {
@@ -63,6 +65,7 @@ export function registerRoutes(app: Express): Server {
 
       (req as any).sessionId = sessionId;
       (req as any).clientType = clientType;
+      (req as any).sessionCookie = sessionCookie;
 
       return true;
     }
@@ -77,12 +80,13 @@ export function registerRoutes(app: Express): Server {
   // Setup authentication
   setupAuth(app);
 
-  wss.on("connection", (ws: WebSocket, req: any) => {
-    const { sessionId, clientType } = req;
+  wss.on("connection", async (ws: WebSocket, req: any) => {
+    const { sessionId, clientType, sessionCookie } = req;
 
     console.log("WebSocket: New connection:", {
       sessionId,
-      clientType
+      clientType,
+      hasSessionCookie: !!sessionCookie
     });
 
     if (!clientsBySession.has(sessionId)) {
@@ -95,7 +99,6 @@ export function registerRoutes(app: Express): Server {
       sessionId
     });
 
-    // Send initial connection confirmation
     try {
       ws.send(JSON.stringify({
         type: 'connection_status',
@@ -116,7 +119,6 @@ export function registerRoutes(app: Express): Server {
           return;
         }
 
-        // Handle ping messages
         if (data.type === 'ping') {
           try {
             ws.send(JSON.stringify({
@@ -130,24 +132,22 @@ export function registerRoutes(app: Express): Server {
           return;
         }
 
-        // Handle admin data requests
         if (data.type === 'admin_data_request' && clientType === 'admin') {
-          // Forward the request to all customers in the session
           broadcastToSession(sessionId, data);
           return;
         }
 
-        // Handle customer data responses
         if (data.type === 'admin_data_response' && clientType === 'customer') {
-          // Forward the response to all admins in the session
           const admins = Array.from(clientsBySession.get(sessionId) || [])
             .filter(client => clientTypes.get(client)?.type === 'admin');
 
           admins.forEach(admin => {
-            try {
-              admin.send(JSON.stringify(data));
-            } catch (error) {
-              console.error('Error forwarding customer data to admin:', error);
+            if (admin.readyState === WebSocket.OPEN) {
+              try {
+                admin.send(JSON.stringify(data));
+              } catch (error) {
+                console.error('Error forwarding customer data to admin:', error);
+              }
             }
           });
           return;
@@ -607,9 +607,7 @@ export function registerRoutes(app: Express): Server {
     res.json(allFeedback);
   });
 
-  // Add this route before the delete route
   app.get("/api/users", ensureAuthenticated, async (req, res) => {
-    // Only allow admins to view all users
     if (!req.user!.isAdmin) {
       return res.status(403).json({ message: "Only admins can view all users" });
     }
@@ -619,7 +617,6 @@ export function registerRoutes(app: Express): Server {
         orderBy: (users, { asc }) => [asc(users.username)],
       });
 
-      // Remove sensitive information before sending
       const safeUsers = allUsers.map(({ password, ...user }) => user);
       res.json(safeUsers);
     } catch (error) {
@@ -632,7 +629,6 @@ export function registerRoutes(app: Express): Server {
     const { id } = req.params;
     const userId = Number(id);
 
-    // Only allow deletion if the current user is an admin
     if (!req.user!.isAdmin) {
       return res.status(403).json({ message: "Only admins can delete users" });
     }
@@ -640,66 +636,53 @@ export function registerRoutes(app: Express): Server {
     try {
       console.log(`Starting deletion process for user ${userId}`);
 
-      // Get all restaurants owned by the user
       const userRestaurants = await db.query.restaurants.findMany({
         where: eq(restaurants.ownerId, userId),
       });
 
       console.log(`Found ${userRestaurants.length} restaurants owned by user ${userId}`);
 
-      // For each restaurant, delete all associated data
       for (const restaurant of userRestaurants) {
         console.log(`Processing restaurant ${restaurant.id}`);
 
-        // Get all tables for this restaurant
         const restaurantTables = await db.query.tables.findMany({
           where: eq(tables.restaurantId, restaurant.id),
         });
 
         console.log(`Found ${restaurantTables.length} tables for restaurant ${restaurant.id}`);
 
-        // For each table, delete all associated data
         for (const table of restaurantTables) {
           console.log(`Processing table ${table.id}`);
 
-          // Get all requests for this table
           const tableRequests = await db.query.requests.findMany({
             where: eq(requests.tableId, table.id),
           });
 
-          // Delete feedback for all requests
           for (const request of tableRequests) {
             await db.delete(feedback)
               .where(eq(feedback.requestId, request.id));
           }
 
-          // Delete requests
           await db.delete(requests)
             .where(eq(requests.tableId, table.id));
 
-          // Delete table sessions
           await db.delete(tableSessions)
             .where(eq(tableSessions.tableId, table.id));
         }
 
-        // Delete all tables for this restaurant
         await db.delete(tables)
           .where(eq(tables.restaurantId, restaurant.id));
 
-        // Delete staff assignments for this restaurant
         await db.delete(restaurantStaff)
           .where(eq(restaurantStaff.restaurantId, restaurant.id));
       }
 
-      // Delete all restaurants owned by the user
       await db.delete(restaurants)
         .where(eq(restaurants.ownerId, userId));
 
-      // Delete any staff assignments where this user is assigned to other restaurants
       await db.delete(restaurantStaff)
         .where(eq(restaurantStaff.userId, userId));
 
-      // Delete the user
       const [deletedUser] = await db.delete(users)
         .where(eq(users.id, userId))
         .returning();
