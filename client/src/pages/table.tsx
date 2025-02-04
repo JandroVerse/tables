@@ -31,7 +31,7 @@ import type { Request, Table } from "@db/schema";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedBackground } from "@/components/animated-background";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 
 const cardVariants = {
   initial: { opacity: 0, y: 20 },
@@ -56,6 +56,7 @@ export default function TablePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const params = useParams();
+  const [, setLocation] = useLocation();
 
   const restaurantId = Number(params.restaurantId);
   const tableId = Number(params.tableId);
@@ -242,18 +243,25 @@ export default function TablePage() {
       } else if (data.type === "end_session" && data.tableId === tableId) {
         // Handle session end event
         localStorage.removeItem(`table_session_${tableId}`);
-        setIsSessionEnded(true);
-        setSessionId(null);
-        setCurrentSessionId(null);
-        setSessionTimeRemaining(0);
+        setLocation('/session-ended');
       }
     });
+
+    // Reconnection logic
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        wsService.connect();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       unsubscribe();
       wsService.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [tableId, queryClient]);
+  }, [tableId, queryClient, setLocation]);
 
   const { data: requests = [], refetch: refetchRequests } = useQuery<RequestWithTable[]>({
     queryKey: ["/api/requests", tableId],

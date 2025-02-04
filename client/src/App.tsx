@@ -7,6 +7,7 @@ import AdminPage from "@/pages/admin";
 import QRPage from "@/pages/qr";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
+import SessionEndedPage from "@/pages/session-ended";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 
@@ -15,6 +16,7 @@ function Router() {
     <Switch>
       {/* Make sure this route comes before the redirect */}
       <Route path="/request/:restaurantId/:tableId" component={TablePage} />
+      <Route path="/session-ended" component={SessionEndedPage} />
       <Route path="/">
         <Redirect to="/admin" />
       </Route>
