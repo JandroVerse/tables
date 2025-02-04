@@ -59,11 +59,25 @@ export default function AdminPage() {
   });
 
   const { data: requests = [], refetch } = useQuery<Request[]>({
-    queryKey: ["/api/requests"],
+    queryKey: ["/api/requests", currentRestaurant?.id],
+    queryFn: async () => {
+      if (!currentRestaurant) return [];
+      const response = await fetch(`/api/requests?restaurantId=${currentRestaurant.id}&sessionId=${sessionId}`);
+      if (!response.ok) throw new Error('Failed to fetch requests');
+      return response.json();
+    },
+    enabled: !!currentRestaurant
   });
 
   const { data: tables = [] } = useQuery<Table[]>({
-    queryKey: ["/api/tables"],
+    queryKey: ["/api/restaurants", currentRestaurant?.id, "tables"],
+    queryFn: async () => {
+      if (!currentRestaurant) return [];
+      const response = await fetch(`/api/restaurants/${currentRestaurant.id}/tables`);
+      if (!response.ok) throw new Error('Failed to fetch tables');
+      return response.json();
+    },
+    enabled: !!currentRestaurant
   });
 
   const { mutate: createRestaurant } = useMutation({
@@ -129,8 +143,12 @@ export default function AdminPage() {
   const currentRestaurant = restaurants[0];
 
   const getSortedRequests = (status: string) => {
+    console.log('Filtering requests:', { status, total: requests.length });
     return requests
-      .filter((r) => r.status === status)
+      .filter((r) => {
+        console.log('Request:', r);
+        return r.status === status;
+      })
       .sort((a, b) => {
         if (status === "completed") {
           return new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime();

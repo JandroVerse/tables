@@ -448,14 +448,14 @@ export function registerRoutes(app: Express): Server {
       const parsedTableId = tableId ? parseInt(tableId as string) : null;
       const parsedRestaurantId = restaurantId ? parseInt(restaurantId as string) : null;
 
-      if (!parsedTableId || isNaN(parsedTableId) || !parsedRestaurantId || isNaN(parsedRestaurantId) || !sessionId) {
+      if (!parsedRestaurantId || isNaN(parsedRestaurantId) || !sessionId) {
         console.log('Invalid parameters:', { tableId, restaurantId, sessionId });
         return res.status(400).json({ message: "Invalid parameters" });
       }
 
       const [table] = await db.query.tables.findMany({
         where: and(
-          eq(tables.id, parsedTableId),
+          tableId ? eq(tables.id, parsedTableId) : undefined,
           eq(tables.restaurantId, parsedRestaurantId)
         ),
       });
@@ -467,7 +467,7 @@ export function registerRoutes(app: Express): Server {
 
       const allRequests = await db.query.requests.findMany({
         where: and(
-          eq(requests.tableId, parsedTableId),
+          tableId ? eq(requests.tableId, parsedTableId) : undefined,
           eq(requests.sessionId, sessionId as string)
         ),
         with: {
