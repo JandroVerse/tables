@@ -38,7 +38,7 @@ function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
 // Create a nanoid generator for 7-character alphanumeric IDs
 const generateSessionId = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 7);
 
-// Add type definition for session data
+// Update the session interface definition
 declare module 'express-session' {
   interface Session {
     sessionId?: string;
@@ -245,6 +245,89 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Update validateSession middleware
+  const validateSession = async (req: Request, res: Response, next: NextFunction) => {
+    const { sessionId } = req.body;
+    const tableId = Number(req.body.tableId || req.params.tableId);
+
+    if (!sessionId) {
+      return res.status(400).json({ message: "Session ID is required" });
+    }
+
+    try {
+      const session = await db.query.tableSessions.findFirst({
+        where: and(
+          eq(tableSessions.tableId, tableId),
+          eq(tableSessions.sessionId, sessionId),
+          isNull(tableSessions.endedAt)
+        ),
+      });
+
+      if (!session) {
+        return res.status(403).json({ message: "Invalid or expired session" });
+      }
+
+      // Check session expiry
+      const SESSION_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+      const sessionStart = new Date(session.startedAt);
+      const sessionAge = Date.now() - sessionStart.getTime();
+
+      if (sessionAge > SESSION_DURATION) {
+        await db.update(tableSessions)
+          .set({ endedAt: new Date() })
+          .where(eq(tableSessions.id, session.id));
+        return res.status(403).json({ message: "Session expired" });
+      }
+
+      // Store session data in req.session
+      req.session.sessionId = session.sessionId;
+      req.session.tableId = session.tableId;
+      next();
+    } catch (error) {
+      console.error('Session validation error:', error);
+      res.status(500).json({ message: "Failed to validate session" });
+    }
+  };
+
+  // Update request endpoint to handle session data properly
+  app.post("/api/requests", validateSession, async (req: Request, res: Response) => {
+    const { type, notes } = req.body;
+    const sessionId = req.session.sessionId;
+    const tableId = req.session.tableId;
+
+    if (!sessionId || !tableId) {
+      return res.status(403).json({ message: "Invalid session" });
+    }
+
+    try {
+      const [request] = await db.insert(requests)
+        .values({
+          tableId,
+          sessionId,
+          type,
+          notes,
+        })
+        .returning();
+
+      // Broadcast the new request to all connected clients
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "new_request",
+            request,
+            tableId: request.tableId
+          }));
+        }
+      });
+
+      res.json(request);
+    } catch (error) {
+      console.error('Error creating request:', error);
+      res.status(500).json({ message: "Failed to create request" });
+    }
+  });
+
+  // Fix table update query
   app.patch("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req:Request, res:Response) => {
     const { restaurantId, tableId } = req.params;
     const { position } = req.body;
@@ -272,7 +355,7 @@ export function registerRoutes(app: Express): Server {
         .set({ position })
         .where(and(
           eq(tables.id, Number(tableId)),
-          eq(tableSessions.restaurantId, Number(restaurantId))
+          eq(tables.restaurantId, Number(restaurantId))
         ))
         .returning();
 
@@ -378,86 +461,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add session validation middleware
-  const validateSession = async (req: Request, res: Response, next: NextFunction) => {
-    const { sessionId } = req.body;
-    const tableId = Number(req.params.tableId);
-
-    if (!sessionId) {
-      return res.status(400).json({ message: "Session ID is required" });
-    }
-
-    try {
-      const session = await db.query.tableSessions.findFirst({
-        where: and(
-          eq(tableSessions.tableId, tableId),
-          eq(tableSessions.sessionId, sessionId),
-          isNull(tableSessions.endedAt)
-        ),
-      });
-
-      if (!session) {
-        return res.status(403).json({ message: "Invalid or expired session" });
-      }
-
-      // Check session expiry
-      const SESSION_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
-      const sessionStart = new Date(session.startedAt);
-      const sessionAge = Date.now() - sessionStart.getTime();
-
-      if (sessionAge > SESSION_DURATION) {
-        await db.update(tableSessions)
-          .set({ endedAt: new Date() })
-          .where(eq(tableSessions.id, session.id));
-        return res.status(403).json({ message: "Session expired" });
-      }
-
-      // Store session data in req.session
-      req.session.sessionId = session.sessionId;
-      req.session.tableId = session.tableId;
-      next();
-    } catch (error) {
-      console.error('Session validation error:', error);
-      res.status(500).json({ message: "Failed to validate session" });
-    }
-  };
-
-  // Add session validation to request endpoints
-  app.post("/api/requests", validateSession, async (req:Request, res:Response) => {
-    const { type, notes } = req.body;
-    const { sessionId, tableId } = req.session;
-
-    if (!sessionId || !tableId) {
-      return res.status(403).json({ message: "Invalid session" });
-    }
-
-    try {
-      const [request] = await db.insert(requests)
-        .values({
-          tableId,
-          sessionId,
-          type,
-          notes,
-        })
-        .returning();
-
-      // Broadcast the new request to all connected clients
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: "new_request",
-            request,
-            tableId: request.tableId
-          }));
-        }
-      });
-
-      res.json(request);
-    } catch (error) {
-      console.error('Error creating request:', error);
-      res.status(500).json({ message: "Failed to create request" });
-    }
-  });
 
   app.get("/api/requests", async (req:Request, res:Response) => {
     const { tableId, sessionId } = req.query;

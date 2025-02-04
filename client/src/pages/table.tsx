@@ -63,7 +63,24 @@ export default function TablePage() {
   const [otherRequestNote, setOtherRequestNote] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(() => {
+    // Initialize from localStorage if available
+    const savedSession = localStorage.getItem(`table_session_${tableId}`);
+    if (savedSession) {
+      try {
+        const { sessionId, timestamp } = JSON.parse(savedSession);
+        // Check if the session is not expired (1 hour)
+        if (Date.now() - timestamp < 60 * 60 * 1000) {
+          return sessionId;
+        } else {
+          localStorage.removeItem(`table_session_${tableId}`);
+        }
+      } catch (e) {
+        localStorage.removeItem(`table_session_${tableId}`);
+      }
+    }
+    return null;
+  });
   const [isWaterDialogOpen, setIsWaterDialogOpen] = useState(false);
   const [waterCount, setWaterCount] = useState(1);
   const [isValidating, setIsValidating] = useState(true);
@@ -86,8 +103,8 @@ export default function TablePage() {
               // Show session prompt for existing session
               setCurrentSessionId(data.activeSession.id);
               setIsSessionPromptOpen(true);
-            } else if (data.requiresNewSession) {
-              // Create new session as first device
+            } else if (data.requiresNewSession && !sessionId) {
+              // Only create new session if we don't have a stored session
               return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
             }
             return null;
@@ -100,6 +117,14 @@ export default function TablePage() {
         })
         .then((session) => {
           if (session) {
+            const sessionData = {
+              sessionId: session.sessionId,
+              timestamp: Date.now()
+            };
+            localStorage.setItem(
+              `table_session_${tableId}`,
+              JSON.stringify(sessionData)
+            );
             setCurrentSessionId(session.sessionId);
             setSessionId(session.sessionId);
             queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
@@ -175,6 +200,14 @@ export default function TablePage() {
       return;
     }
 
+    const sessionData = {
+      sessionId: sessionInputValue,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(
+      `table_session_${tableId}`,
+      JSON.stringify(sessionData)
+    );
     setSessionId(sessionInputValue);
     setIsSessionPromptOpen(false);
     queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
