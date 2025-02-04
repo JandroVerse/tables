@@ -113,7 +113,7 @@ export default function TablePage() {
 
     const sessionData = {
       sessionId: sessionInputValue,
-      startedAt: new Date().toISOString(), // This will be replaced with server response
+      startedAt: new Date().toISOString(), 
       isCreator: false 
     };
     localStorage.setItem(
@@ -175,7 +175,7 @@ export default function TablePage() {
             setCurrentSessionId(session.sessionId);
             setSessionId(session.sessionId);
             setIsSessionCreator(true);
-            setSessionTimeRemaining(60 * 60 * 1000); // 1 hour in milliseconds
+            setSessionTimeRemaining(60 * 60 * 1000); 
             queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
             toast({
               title: "Session Created",
@@ -356,6 +356,33 @@ export default function TablePage() {
     }
   };
 
+  const { mutate: endSession } = useMutation({
+    mutationFn: async () => {
+      if (!sessionId) throw new Error("No active session");
+      const response = await apiRequest(
+        "POST", 
+        `/api/restaurants/${restaurantId}/tables/${tableId}/sessions/end`,
+        { sessionId }
+      );
+      return response.json();
+    },
+    onSuccess: () => {
+      localStorage.removeItem(`table_session_${tableId}`);
+      toast({
+        title: "Session Ended",
+        description: "Table session has been closed successfully.",
+      });
+      window.location.reload();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to end session. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Failed to end session:", error);
+    },
+  });
 
   if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
     return (
@@ -819,6 +846,36 @@ export default function TablePage() {
                 </TabsContent>
               </Tabs>
             )}
+
+            {/* Add the Close Session button */}
+            <div className="mt-8 flex justify-center">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    className="w-full max-w-sm"
+                  >
+                    Close Table Session
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Close Session?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will end the current table session. All members will be disconnected and a new session will be required for future requests.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => endSession()}
+                    >
+                      Yes, Close Session
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
 
             {feedbackRequest && (
               <FeedbackDialog

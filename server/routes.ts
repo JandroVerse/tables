@@ -15,6 +15,7 @@ function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
   const publicPaths = [
     '/api/restaurants/*/tables/*/verify',
     '/api/restaurants/*/tables/*/sessions',
+    '/api/restaurants/*/tables/*/sessions/end', // Added new path
     '/api/requests',
     '/ws'
   ];
@@ -463,6 +464,37 @@ export function registerRoutes(app: Express): Server {
   });
 
 
+  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions/end", async (req:Request, res:Response) => {
+    const { restaurantId, tableId } = req.params;
+    const { sessionId } = req.body;
+
+    try {
+      // Close the session by setting endedAt
+      await db.update(tableSessions)
+        .set({ endedAt: new Date() })
+        .where(and(
+          eq(tableSessions.tableId, Number(tableId)),
+          eq(tableSessions.sessionId, sessionId),
+          isNull(tableSessions.endedAt)
+        ));
+
+      // Broadcast session end to all connected clients
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "end_session",
+            tableId: Number(tableId),
+            sessionId
+          }));
+        }
+      });
+
+      res.json({ message: "Session ended successfully" });
+    } catch (error) {
+      console.error('Error ending session:', error);
+      res.status(500).json({ message: "Failed to end session" });
+    }
+  });
 
   app.get("/api/requests", async (req:Request, res:Response) => {
     const { tableId, sessionId } = req.query;
