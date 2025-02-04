@@ -33,9 +33,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedBackground } from "@/components/animated-background";
 import { useParams } from "wouter";
 
-interface RequestWithTable extends Request {
-  table?: Table;  // Make table optional since it might not be loaded yet
-}
+// Rest of the imports remain the same...
 
 const cardVariants = {
   initial: { opacity: 0, y: 20 },
@@ -72,8 +70,13 @@ export default function TablePage() {
   const [waterCount, setWaterCount] = useState(1);
   const [isValidating, setIsValidating] = useState(true);
   const [isValid, setIsValid] = useState(false);
+  const [isSessionPromptOpen, setIsSessionPromptOpen] = useState(false);
+  const [sessionInputValue, setSessionInputValue] = useState("");
+  const [sessionError, setSessionError] = useState("");
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  // Verify the table exists first
+
+  // Modified table verification effect
   useEffect(() => {
     if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
       fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`)
@@ -81,15 +84,32 @@ export default function TablePage() {
         .then((data) => {
           if (data.valid) {
             setIsValid(true);
-            // Fixed the session creation endpoint URL
-            return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
+            if (data.activeSession) {
+              // Show session prompt for existing session
+              setCurrentSessionId(data.activeSession.id);
+              setIsSessionPromptOpen(true);
+            } else if (data.requiresNewSession) {
+              // Create new session as first device
+              return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
+            }
+            return null;
           }
           throw new Error("Invalid table");
         })
-        .then((res) => res.json())
+        .then((res) => {
+          if (res) return res.json();
+          return null;
+        })
         .then((session) => {
-          setSessionId(session.sessionId);
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+          if (session) {
+            setCurrentSessionId(session.sessionId);
+            setSessionId(session.sessionId);
+            queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+            toast({
+              title: "Session Created",
+              description: `Your session ID is: ${session.sessionId}. Share this with others who want to join this table.`,
+            });
+          }
         })
         .catch((error) => {
           console.error("Failed to verify table or create session:", error);
@@ -144,6 +164,23 @@ export default function TablePage() {
     staleTime: 0,
     refetchInterval: 5000 // Polling fallback every 5 seconds
   });
+
+  // Handle session input submission
+  const handleSessionSubmit = () => {
+    if (!sessionInputValue) {
+      setSessionError("Please enter a session ID");
+      return;
+    }
+
+    if (sessionInputValue !== currentSessionId) {
+      setSessionError("Invalid session ID");
+      return;
+    }
+
+    setSessionId(sessionInputValue);
+    setIsSessionPromptOpen(false);
+    queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+  };
 
   const { mutate: createRequest } = useMutation({
     mutationFn: async ({ type, notes }: { type: string; notes?: string }) => {
@@ -235,6 +272,44 @@ export default function TablePage() {
           </CardHeader>
           <CardContent>
             <p>This table appears to be invalid or no longer exists. Please scan a valid QR code.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Add session prompt dialog
+  if (isSessionPromptOpen) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-[90%] max-w-md">
+          <CardHeader>
+            <CardTitle>Enter Session ID</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="sessionId">Session ID</Label>
+                <Input
+                  id="sessionId"
+                  value={sessionInputValue}
+                  onChange={(e) => {
+                    setSessionInputValue(e.target.value);
+                    setSessionError("");
+                  }}
+                  placeholder="Enter the session ID shared with you"
+                />
+                {sessionError && (
+                  <p className="text-sm text-red-500">{sessionError}</p>
+                )}
+              </div>
+              <Button
+                className="w-full"
+                onClick={handleSessionSubmit}
+              >
+                Join Session
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -533,9 +608,9 @@ export default function TablePage() {
                               <CardContent className="p-4">
                                 <div className="font-medium text-primary">
                                   {request.type === "water" ? "Water Refill" :
-                                   request.type === "waiter" ? "Call Waiter" :
-                                   request.type === "check" ? "Get Check" :
-                                   request.type}
+                                    request.type === "waiter" ? "Call Waiter" :
+                                      request.type === "check" ? "Get Check" :
+                                        request.type}
                                   {request.table && (
                                     <span className="ml-2 text-sm text-muted-foreground">
                                       {request.table.name}
@@ -557,10 +632,10 @@ export default function TablePage() {
                                     Status:{" "}
                                     <span className="capitalize">
                                       {request.status === "in_progress" ? "In Progress" :
-                                       request.status === "pending" ? "Pending" :
-                                       request.status === "completed" ? "Completed" :
-                                       request.status === "cleared" ? "Cancelled" :
-                                       request.status}
+                                        request.status === "pending" ? "Pending" :
+                                          request.status === "completed" ? "Completed" :
+                                            request.status === "cleared" ? "Cancelled" :
+                                              request.status}
                                     </span>
                                   </motion.div>
                                   {request.status === "pending" && (
@@ -633,9 +708,9 @@ export default function TablePage() {
                               <CardContent className="p-4">
                                 <div className="font-medium text-primary">
                                   {request.type === "water" ? "Water Refill" :
-                                   request.type === "waiter" ? "Call Waiter" :
-                                   request.type === "check" ? "Get Check" :
-                                   request.type}
+                                    request.type === "waiter" ? "Call Waiter" :
+                                      request.type === "check" ? "Get Check" :
+                                        request.type}
                                   {request.table && (
                                     <span className="ml-2 text-sm text-muted-foreground">
                                       {request.table.name}
@@ -689,4 +764,8 @@ export default function TablePage() {
       </motion.div>
     </div>
   );
+}
+
+interface RequestWithTable extends Request {
+  table?: Table;  // Make table optional since it might not be loaded yet
 }

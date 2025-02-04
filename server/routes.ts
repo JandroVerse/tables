@@ -12,7 +12,7 @@ import { setupAuth } from "./auth";
 function ensureAuthenticated(req: any, res: any, next: Function) {
   // Allow unauthenticated access to table-related routes and WebSocket connections
   if (
-    req.path.startsWith('/api/restaurants') && 
+    req.path.startsWith('/api/restaurants') &&
     (req.path.includes('/tables/') || req.path.includes('/sessions')) ||
     req.path === '/ws'
   ) {
@@ -27,7 +27,7 @@ function ensureAuthenticated(req: any, res: any, next: Function) {
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
-  const wss = new WebSocketServer({ 
+  const wss = new WebSocketServer({
     server: httpServer,
     path: '/ws',
     verifyClient: ({ req }) => {
@@ -131,7 +131,7 @@ export function registerRoutes(app: Express): Server {
       const tableUrl = `${protocol}://${domain}/request/${restaurantId}/${table.id}`;
       console.log('Generating QR code for URL:', tableUrl);
 
-      const qrCodeSvg = await QRCode.toString(tableUrl, { 
+      const qrCodeSvg = await QRCode.toString(tableUrl, {
         type: 'svg',
         width: 256,
         margin: 4,
@@ -180,7 +180,44 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Table not found" });
       }
 
-      res.json({ valid: true, table });
+      // Check for active session
+      const activeSession = await db.query.tableSessions.findFirst({
+        where: and(
+          eq(tableSessions.tableId, Number(tableId)),
+          eq(tableSessions.endedAt, null)
+        ),
+      });
+
+      // Calculate session expiry
+      const SESSION_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+      const now = new Date();
+
+      if (activeSession) {
+        const sessionStart = new Date(activeSession.startedAt);
+        const sessionAge = now.getTime() - sessionStart.getTime();
+
+        if (sessionAge > SESSION_DURATION) {
+          // Session expired, end it
+          await db.update(tableSessions)
+            .set({ endedAt: now })
+            .where(eq(tableSessions.id, activeSession.id));
+
+          res.json({ valid: true, table, requiresNewSession: true });
+        } else {
+          // Active session exists
+          res.json({
+            valid: true,
+            table,
+            activeSession: {
+              id: activeSession.sessionId,
+              expiresIn: SESSION_DURATION - sessionAge
+            }
+          });
+        }
+      } else {
+        // No active session
+        res.json({ valid: true, table, requiresNewSession: true });
+      }
     } catch (error) {
       console.error('Error verifying table:', error);
       res.status(500).json({ message: "Failed to verify table" });
@@ -225,9 +262,9 @@ export function registerRoutes(app: Express): Server {
       // Broadcast the update to all connected clients
       wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ 
-            type: "update_table", 
-            table: updatedTable 
+          client.send(JSON.stringify({
+            type: "update_table",
+            table: updatedTable
           }));
         }
       });
@@ -268,10 +305,10 @@ export function registerRoutes(app: Express): Server {
 
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ 
-          type: "delete_table", 
+        client.send(JSON.stringify({
+          type: "delete_table",
           tableId,
-          restaurantId 
+          restaurantId
         }));
       }
     });
@@ -280,7 +317,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Session management
-  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", ensureAuthenticated, async (req, res) => {
+  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req, res) => {
     const { restaurantId, tableId } = req.params;
     const sessionId = nanoid();
 
@@ -302,6 +339,17 @@ export function registerRoutes(app: Express): Server {
         })
         .returning();
 
+      // Broadcast new session to all connected clients
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: "new_session",
+            tableId: Number(tableId),
+            sessionId: session.sessionId
+          }));
+        }
+      });
+
       res.json(session);
     } catch (error) {
       console.error('Error creating session:', error);
@@ -309,7 +357,74 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Request routes
+  // Add session validation middleware
+  const validateSession = async (req: any, res: any, next: Function) => {
+    const { sessionId } = req.body;
+    const tableId = Number(req.params.tableId);
+
+    if (!sessionId) {
+      return res.status(400).json({ message: "Session ID is required" });
+    }
+
+    try {
+      const session = await db.query.tableSessions.findFirst({
+        where: and(
+          eq(tableSessions.tableId, tableId),
+          eq(tableSessions.sessionId, sessionId),
+          eq(tableSessions.endedAt, null)
+        ),
+      });
+
+      if (!session) {
+        return res.status(403).json({ message: "Invalid or expired session" });
+      }
+
+      // Check session expiry
+      const SESSION_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+      const sessionStart = new Date(session.startedAt);
+      const sessionAge = Date.now() - sessionStart.getTime();
+
+      if (sessionAge > SESSION_DURATION) {
+        await db.update(tableSessions)
+          .set({ endedAt: new Date() })
+          .where(eq(tableSessions.id, session.id));
+        return res.status(403).json({ message: "Session expired" });
+      }
+
+      req.session = session;
+      next();
+    } catch (error) {
+      console.error('Session validation error:', error);
+      res.status(500).json({ message: "Failed to validate session" });
+    }
+  };
+
+  // Add session validation to request endpoints
+  app.post("/api/requests", validateSession, async (req, res) => {
+    const { tableId, type, notes } = req.body;
+    const sessionId = req.session.sessionId;
+
+    const [request] = await db.insert(requests).values({
+      tableId,
+      sessionId,
+      type,
+      notes,
+    }).returning();
+
+    // Broadcast the new request to all connected clients
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: "new_request",
+          request,
+          tableId: request.tableId
+        }));
+      }
+    });
+
+    res.json(request);
+  });
+
   app.get("/api/requests", async (req, res) => {
     const { tableId, sessionId } = req.query;
     let query = {};
@@ -343,29 +458,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/requests", async (req, res) => {
-    const { tableId, sessionId, type, notes } = req.body;
-
-    const [request] = await db.insert(requests).values({
-      tableId,
-      sessionId,
-      type,
-      notes,
-    }).returning();
-
-    // Broadcast the new request to all connected clients
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ 
-          type: "new_request", 
-          request,
-          tableId: request.tableId 
-        }));
-      }
-    });
-
-    res.json(request);
-  });
 
   app.patch("/api/requests/:id", async (req, res) => {
     const { id } = req.params;
@@ -383,10 +475,10 @@ export function registerRoutes(app: Express): Server {
     // Broadcast the updated request to all connected clients
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ 
-          type: "update_request", 
+        client.send(JSON.stringify({
+          type: "update_request",
           request,
-          tableId: request.tableId 
+          tableId: request.tableId
         }));
       }
     });
@@ -407,8 +499,8 @@ export function registerRoutes(app: Express): Server {
     }
 
     if (request.status !== "completed") {
-      return res.status(400).json({ 
-        message: "Can only provide feedback for completed requests" 
+      return res.status(400).json({
+        message: "Can only provide feedback for completed requests"
       });
     }
 
@@ -417,8 +509,8 @@ export function registerRoutes(app: Express): Server {
     });
 
     if (existingFeedback) {
-      return res.status(400).json({ 
-        message: "Feedback already submitted for this request" 
+      return res.status(400).json({
+        message: "Feedback already submitted for this request"
       });
     }
 
@@ -432,9 +524,9 @@ export function registerRoutes(app: Express): Server {
 
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ 
-          type: "new_feedback", 
-          feedback: newFeedback 
+        client.send(JSON.stringify({
+          type: "new_feedback",
+          feedback: newFeedback
         }));
       }
     });
