@@ -83,13 +83,15 @@ export default function AdminPage() {
       });
       form.reset();
     },
-    onError: (error) => {
+    onError: (error: Error) => {
+      // Improve error logging
       toast({
         title: "Error",
         description: "Failed to create restaurant. Please try again.",
         variant: "destructive",
       });
-      console.error("Failed to create restaurant:", error);
+      // Only log the error message without the full stack trace
+      console.error("Restaurant creation failed:", error.message);
     },
   });
 

@@ -61,12 +61,9 @@ export default function TablePage() {
   const queryClient = useQueryClient();
   const params = useParams();
 
-  console.log('Table Page Params:', params);
-
   const restaurantId = Number(params.restaurantId);
   const tableId = Number(params.tableId);
 
-  console.log('Parsed IDs:', { restaurantId, tableId });
   const [otherRequestNote, setOtherRequestNote] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedbackRequest, setFeedbackRequest] = useState<Request | null>(null);
@@ -110,20 +107,14 @@ export default function TablePage() {
 
   useEffect(() => {
     wsService.connect();
-    console.log('Connecting to WebSocket service...');
-
     const unsubscribe = wsService.subscribe((data) => {
-      console.log('Received WebSocket message:', data);
-
       // Handle different types of updates
       if (data.type === "new_request" && data.tableId === tableId) {
-        console.log('New request received, refreshing...');
         queryClient.invalidateQueries({
           queryKey: ["/api/requests", tableId],
           exact: true
         });
       } else if (data.type === "update_request" && data.tableId === tableId) {
-        console.log('Request updated, refreshing...');
         queryClient.invalidateQueries({
           queryKey: ["/api/requests", tableId],
           exact: true
@@ -133,7 +124,6 @@ export default function TablePage() {
 
     // Cleanup function
     return () => {
-      console.log('Cleaning up WebSocket connection...');
       unsubscribe();
       wsService.disconnect();
     };

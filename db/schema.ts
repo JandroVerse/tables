@@ -164,8 +164,8 @@ export const selectFeedbackSchema = createSelectSchema(feedback);
 export const insertFloorPlanSchema = createInsertSchema(floorPlan);
 export const selectFloorPlanSchema = createSelectSchema(floorPlan);
 
-// Types
-export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+export type SelectUser = typeof users.$inferSelect;
 export type Restaurant = typeof restaurants.$inferSelect;
 export type RestaurantStaff = typeof restaurantStaff.$inferSelect;
 export type Table = typeof tables.$inferSelect;

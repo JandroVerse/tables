@@ -16,7 +16,10 @@ class WebSocketService {
     this.ws = new WebSocket(`${protocol}//${host}/ws`);
 
     this.ws.onopen = () => {
-      console.log('WebSocket connected');
+      // Only log initial connection
+      if (this.reconnectAttempts === 0) {
+        console.log('WebSocket connected');
+      }
       this.reconnectAttempts = 0;
       this.startPingInterval();
     };
@@ -24,7 +27,10 @@ class WebSocketService {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('WebSocket message received:', data);
+        // Only log non-ping messages
+        if (data.type !== 'ping') {
+          console.log('WebSocket message received:', data);
+        }
         this.listeners.forEach(listener => listener(data));
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -32,13 +38,20 @@ class WebSocketService {
     };
 
     this.ws.onclose = () => {
-      console.log('WebSocket connection closed');
+      if (this.reconnectAttempts === 0) {
+        console.log('WebSocket connection closed');
+      }
       this.cleanup();
 
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
-        console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        // Only log first reconnection attempt
+        if (this.reconnectAttempts === 1) {
+          console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        }
         setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);
+      } else if (this.reconnectAttempts === this.maxReconnectAttempts) {
+        console.error('Maximum reconnection attempts reached');
       }
     };
 
@@ -75,7 +88,10 @@ class WebSocketService {
         console.error('Error sending WebSocket message:', error);
       }
     } else {
-      console.warn('WebSocket is not connected. Message not sent:', data);
+      // Only log if it's not a ping message
+      if (data.type !== 'ping') {
+        console.warn('WebSocket is not connected. Message not sent:', data);
+      }
     }
   }
 

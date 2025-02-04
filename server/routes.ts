@@ -10,8 +10,12 @@ import { setupAuth } from "./auth";
 
 // Modified to properly type the next function
 function ensureAuthenticated(req: any, res: any, next: Function) {
-  // Allow unauthenticated access to table-related routes
-  if (req.path.startsWith('/api/restaurants') && req.path.includes('/tables/')) {
+  // Allow unauthenticated access to table-related routes and WebSocket connections
+  if (
+    req.path.startsWith('/api/restaurants') && 
+    (req.path.includes('/tables/') || req.path.includes('/sessions')) ||
+    req.path === '/ws'
+  ) {
     return next();
   }
 
@@ -42,38 +46,6 @@ export function registerRoutes(app: Express): Server {
 
   // Setup authentication
   setupAuth(app);
-
-  // WebSocket setup section
-  wss.on("connection", (ws: WebSocket) => {
-    console.log("New WebSocket connection established");
-
-    // Send a welcome message to confirm connection
-    ws.send(JSON.stringify({ type: "connected", timestamp: new Date().toISOString() }));
-
-    ws.on("message", async (message: string) => {
-      try {
-        console.log("Received WebSocket message:", message.toString());
-        const data = JSON.parse(message.toString());
-
-        // Broadcast to all connected clients
-        wss.clients.forEach((client) => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(data));
-          }
-        });
-      } catch (error) {
-        console.error("Failed to parse WebSocket message:", error);
-      }
-    });
-
-    ws.on("close", () => {
-      console.log("WebSocket connection closed");
-    });
-
-    ws.on("error", (error) => {
-      console.error("WebSocket error:", error);
-    });
-  });
 
   // Restaurant routes
   app.post("/api/restaurants", ensureAuthenticated, async (req, res) => {
@@ -308,7 +280,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Session management
-  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", async (req, res) => {
+  app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions", ensureAuthenticated, async (req, res) => {
     const { restaurantId, tableId } = req.params;
     const sessionId = nanoid();
 
