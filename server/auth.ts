@@ -59,11 +59,16 @@ export function setupAuth(app: Express) {
     cookie: {
       secure: app.get("env") === "production",
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: 'lax',
+      httpOnly: true
     }
   };
 
   if (app.get("env") === "production") {
     app.set("trust proxy", 1);
+    if (sessionSettings.cookie) {
+      sessionSettings.cookie.secure = true;
+    }
   }
 
   app.use(session(sessionSettings));
@@ -77,7 +82,7 @@ export function setupAuth(app: Express) {
         const [user] = await getUserByUsername(username);
         if (!user) {
           console.log('User not found:', username);
-          return done(null, false);
+          return done(null, false, { message: 'Invalid username or password' });
         }
 
         const passwordMatch = await comparePasswords(password, user.password);
@@ -85,11 +90,12 @@ export function setupAuth(app: Express) {
 
         if (!passwordMatch) {
           console.log('Password mismatch for user:', username);
-          return done(null, false);
+          return done(null, false, { message: 'Invalid username or password' });
         }
 
+        const { password: _, ...userWithoutPassword } = user;
         console.log('Login successful for user:', username);
-        return done(null, user);
+        return done(null, userWithoutPassword);
       } catch (error) {
         console.error('Login error:', error);
         return done(error);
@@ -135,36 +141,46 @@ export function setupAuth(app: Express) {
     try {
       const [existingUser] = await getUserByUsername(req.body.username);
       if (existingUser) {
-        return res.status(400).send("Username already exists");
+        return res.status(400).json({ message: "Username already exists" });
       }
 
+      const hashedPassword = await hashPassword(req.body.password);
       const [user] = await db
         .insert(usersTable)
         .values({
           username: req.body.username,
-          password: await hashPassword(req.body.password),
+          password: hashedPassword,
           email: req.body.email,
           role: req.body.role || "user",
           isAdmin: req.body.role === "admin"
         })
         .returning();
 
-      req.login(user, (err) => {
+      const { password: _, ...userWithoutPassword } = user;
+      req.login(userWithoutPassword, (err) => {
         if (err) return next(err);
-        res.status(201).json(user);
+        res.status(201).json(userWithoutPassword);
       });
     } catch (error) {
       next(error);
     }
   });
 
-  app.post("/api/login", passport.authenticate("local"), (req, res) => {
-    console.log('Login successful, user:', req.user);
-    res.status(200).json(req.user);
+  app.post("/api/login", (req, res, next) => {
+    passport.authenticate("local", (err, user, info) => {
+      if (err) return next(err);
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Invalid credentials" });
+      }
+      req.login(user, (err) => {
+        if (err) return next(err);
+        res.json(user);
+      });
+    })(req, res, next);
   });
 
   app.post("/api/logout", (req, res, next) => {
-    req.session.destroy((err) => {
+    req.logout((err) => {
       if (err) return next(err);
       res.clearCookie('connect.sid');
       res.sendStatus(200);
@@ -172,7 +188,9 @@ export function setupAuth(app: Express) {
   });
 
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
     res.json(req.user);
   });
 }

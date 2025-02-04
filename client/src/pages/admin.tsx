@@ -155,34 +155,32 @@ export default function AdminPage() {
   }, [logoutMutation.isSuccess, setLocation]);
 
   useEffect(() => {
-    wsService.connect(sessionId || 'admin-session', 'admin');
-    const unsubscribe = wsService.subscribe((data) => {
-      if (data.type === "new_request" || data.type === "update_request") {
+    if (!sessionId || !currentRestaurant?.id) return;
+
+    // Connect to WebSocket
+    async function connectWebSocket() {
+      try {
+        await wsService.connect(sessionId);
+
+        // After successful connection, fetch initial data
         refetch();
-      } else if (data.type === 'admin_data_response') {
-        console.log('Received customer data:', data);
-        // Handle customer data response here
+      } catch (error) {
+        console.error('Failed to connect to WebSocket:', error);
         toast({
-          title: "Customer Update",
-          description: `Table ${data.tableId} last updated at ${new Date(data.data.lastUpdate).toLocaleTimeString()}`,
+          title: "Connection Error",
+          description: "Failed to establish real-time connection. Please refresh the page.",
+          variant: "destructive",
         });
       }
-    });
+    }
 
-    // Request customer data every 30 seconds
-    const dataRequestInterval = setInterval(() => {
-      tables.forEach(table => {
-        wsService.requestCustomerData(table.id, table.restaurantId);
-      });
-    }, 30000);
+    connectWebSocket();
 
+    // Clean up on unmount
     return () => {
-      console.log('Cleaning up WebSocket connection');
-      clearInterval(dataRequestInterval);
-      unsubscribe();
       wsService.disconnect();
     };
-  }, [tables]);
+  }, [sessionId, currentRestaurant?.id, refetch, toast]);
 
   const onSubmit = (data: CreateRestaurantForm) => {
     createRestaurant(data);

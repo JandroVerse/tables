@@ -171,39 +171,51 @@ export default function TablePage() {
 
     console.log('Setting up WebSocket with session:', sessionId);
 
-    // Clean up any existing connection before establishing a new one
-    wsService.disconnect();
-    wsService.connect(sessionId, 'customer');
+    async function connectWebSocket() {
+      try {
+        await wsService.connect(sessionId);
 
-    // Subscribe to WebSocket events
-    const unsubscribe = wsService.subscribe((data) => {
-      console.log('Received WebSocket event:', data);
+        // Send initial table status
+        wsService.send({
+          type: 'server_update',
+          timestamp: new Date().toISOString(),
+          sessionId,
+          data: {
+            tableId,
+            restaurantId,
+            action: 'table_connect'
+          }
+        });
 
-      if (data.type === 'new_request' || data.type === 'update_request') {
-        console.log('Invalidating requests query due to:', data.type);
+        // After connection, refresh request data
         queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
-      } else if (data.type === 'connection_status') {
-        console.log('WebSocket connection status:', data.status);
-        if (data.status === 'connected') {
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId, restaurantId] });
-        }
+      } catch (error) {
+        console.error('Failed to connect to WebSocket:', error);
+        toast({
+          title: "Connection Error",
+          description: "Failed to establish real-time connection. Please refresh the page.",
+          variant: "destructive",
+        });
       }
-    });
+    }
+
+    connectWebSocket();
 
     // Ping every 30 seconds to keep connection alive
     const pingInterval = setInterval(() => {
-      if (wsService) {
-        wsService.send({ type: 'ping', tableId, restaurantId });
-      }
+      wsService.send({
+        type: 'ping',
+        timestamp: new Date().toISOString(),
+        sessionId
+      });
     }, 30000);
 
     return () => {
       console.log('Cleaning up WebSocket connection');
       clearInterval(pingInterval);
-      unsubscribe();
       wsService.disconnect();
     };
-  }, [sessionId, tableId, restaurantId, queryClient]);
+  }, [sessionId, tableId, restaurantId, queryClient, toast]);
 
   // Timer effect for session expiry
   useEffect(() => {
@@ -371,7 +383,7 @@ export default function TablePage() {
 
   const { mutate: cancelRequest } = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("PATCH", `/api/requests/${id}`, { 
+      return apiRequest("PATCH", `/api/requests/${id}`, {
         status: "cleared",
         sessionId  // Include sessionId in the request
       });

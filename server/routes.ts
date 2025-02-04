@@ -3,10 +3,8 @@ import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
 import { tables, requests, feedback, tableSessions, restaurants, users, restaurantStaff } from "@db/schema";
-import { eq, and, SQL, PgColumn } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { eq, and } from "drizzle-orm";
 import { setupAuth } from "./auth";
-import QRCode from "qrcode";
 
 // WebSocket client tracking
 interface WebSocketClient {
@@ -16,28 +14,7 @@ interface WebSocketClient {
 }
 
 const clients = new Map<WebSocket, WebSocketClient>();
-const sessionClients = new Map<string, Set<WebSocket>>();
 
-function broadcastToSession(sessionId: string, message: any, excludeClient?: WebSocket) {
-  const timestamp = new Date().toISOString();
-  const fullMessage = { ...message, timestamp, sessionId };
-
-  const clients = sessionClients.get(sessionId);
-  if (clients) {
-    const messageStr = JSON.stringify(fullMessage);
-    clients.forEach(client => {
-      if (client !== excludeClient && client.readyState === WebSocket.OPEN) {
-        try {
-          client.send(messageStr);
-        } catch (error) {
-          console.error('Error sending message to client:', error);
-        }
-      }
-    });
-  }
-}
-
-// Clean up inactive clients periodically
 function startCleanupInterval() {
   setInterval(() => {
     const now = new Date();
@@ -61,7 +38,12 @@ export function registerRoutes(app: Express): Server {
         return false;
       }
       const url = new URL(req.url!, `http://${req.headers.host}`);
-      return !!url.searchParams.get('sessionId');
+      const sessionId = url.searchParams.get('sessionId');
+      if (!sessionId) {
+        console.log('WebSocket: Connection rejected - no sessionId');
+        return false;
+      }
+      return true;
     }
   });
 
@@ -77,11 +59,6 @@ export function registerRoutes(app: Express): Server {
       sessionId,
       lastPing: new Date()
     });
-
-    if (!sessionClients.has(sessionId)) {
-      sessionClients.set(sessionId, new Set());
-    }
-    sessionClients.get(sessionId)!.add(ws);
 
     // Send initial connection confirmation
     ws.send(JSON.stringify({
@@ -111,19 +88,6 @@ export function registerRoutes(app: Express): Server {
             timestamp: new Date().toISOString(),
             sessionId
           }));
-          return;
-        }
-
-        if (message.type === 'client_update') {
-          // Broadcast update to other clients in the same session
-          broadcastToSession(sessionId, message, ws);
-
-          // If this is a status update, store it in the database
-          if (message.data?.status) {
-            await db.update(tableSessions)
-              .set({ lastActivityAt: new Date() })
-              .where(eq(tableSessions.sessionId, sessionId));
-          }
         }
 
       } catch (error) {
@@ -140,13 +104,6 @@ export function registerRoutes(app: Express): Server {
     ws.on('close', () => {
       const client = clients.get(ws);
       if (client) {
-        const clientsForSession = sessionClients.get(client.sessionId);
-        if (clientsForSession) {
-          clientsForSession.delete(ws);
-          if (clientsForSession.size === 0) {
-            sessionClients.delete(client.sessionId);
-          }
-        }
         clients.delete(ws);
       }
     });
@@ -329,10 +286,6 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Table not found" });
       }
 
-      broadcastToSession(sessionId, {
-        type: "update_table",
-        table: updatedTable
-      });
 
       res.json(updatedTable);
     } catch (error) {
@@ -342,7 +295,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   app.delete("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req, res) => {
-    const { restaurantId, tableId, sessionId } = req.params;
+    const { restaurantId, tableId } = req.params;
 
     const [restaurant] = await db.query.restaurants.findMany({
       where: and(
@@ -366,12 +319,6 @@ export function registerRoutes(app: Express): Server {
     if (!deletedTable) {
       return res.status(404).json({ message: "Table not found" });
     }
-
-    broadcastToSession(sessionId, {
-      type: "delete_table",
-      tableId,
-      restaurantId
-    });
 
     res.json(deletedTable);
   });
@@ -511,9 +458,6 @@ export function registerRoutes(app: Express): Server {
 
       console.log(`Created request ${request.id} for table ${tableId}`);
 
-      // Broadcast to all clients in the session
-      broadcastToSession(sessionId, { type: "new_request", request });
-
       res.json(request);
     } catch (error) {
       console.error('Error creating request:', error);
@@ -526,7 +470,7 @@ export function registerRoutes(app: Express): Server {
 
   app.patch("/api/requests/:id", async (req, res) => {
     const { id } = req.params;
-    const { status, sessionId } = req.body;
+    const { status } = req.body;
 
     const [request] = await db
       .update(requests)
@@ -536,8 +480,6 @@ export function registerRoutes(app: Express): Server {
       })
       .where(eq(requests.id, Number(id)))
       .returning();
-
-    broadcastToSession(sessionId, { type: "update_request", request });
 
     res.json(request);
   });
@@ -577,10 +519,6 @@ export function registerRoutes(app: Express): Server {
       })
       .returning();
 
-    broadcastToSession(request.sessionId, {
-      type: "new_feedback",
-      feedback: newFeedback
-    });
 
     res.json(newFeedback);
   });
