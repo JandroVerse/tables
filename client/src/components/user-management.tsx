@@ -29,7 +29,7 @@ export function UserManagement() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
 
-  const { data: users = [] } = useQuery<User[]>({
+  const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
     queryFn: async () => {
       const response = await fetch("/api/users");
@@ -38,7 +38,7 @@ export function UserManagement() {
     },
   });
 
-  const { mutate: deleteUser } = useMutation({
+  const { mutate: deleteUser, isPending: isDeleting } = useMutation({
     mutationFn: async (userId: number) => {
       const response = await apiRequest("DELETE", `/api/users/${userId}`);
       if (!response.ok) {
@@ -47,7 +47,7 @@ export function UserManagement() {
       }
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({
         title: "Success",
@@ -65,6 +65,19 @@ export function UserManagement() {
 
   if (!currentUser?.isAdmin) {
     return null;
+  }
+
+  if (isLoading) {
+    return (
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>User Management</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center">Loading users...</div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -96,14 +109,21 @@ export function UserManagement() {
               {currentUser.id !== user.id && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm">Delete User</Button>
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      disabled={isDeleting}
+                    >
+                      Delete User
+                    </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>Delete {user.username}?</AlertDialogTitle>
                       <AlertDialogDescription>
                         This action cannot be undone. This will permanently delete the
-                        user account and all associated data.
+                        user account and all associated data. Note: Users who own restaurants
+                        cannot be deleted until their restaurants are transferred or deleted.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -111,6 +131,7 @@ export function UserManagement() {
                       <AlertDialogAction
                         onClick={() => deleteUser(user.id)}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        disabled={isDeleting}
                       >
                         Delete
                       </AlertDialogAction>
