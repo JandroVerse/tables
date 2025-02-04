@@ -104,6 +104,7 @@ export default function TablePage() {
   const [sessionInputValue, setSessionInputValue] = useState("");
   const [sessionError, setSessionError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sessionTimeRemaining, setSessionTimeRemaining] = useState(60 * 60 * 1000); // 1 hour in ms
 
 
   // Modified table verification effect
@@ -167,6 +168,38 @@ export default function TablePage() {
         });
     }
   }, [restaurantId, tableId]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    // Get initial remaining time from localStorage
+    const savedSession = localStorage.getItem(`table_session_${tableId}`);
+    if (savedSession) {
+      try {
+        const { timestamp } = JSON.parse(savedSession);
+        const elapsed = Date.now() - timestamp;
+        const remaining = Math.max(60 * 60 * 1000 - elapsed, 0);
+        setSessionTimeRemaining(remaining);
+      } catch (e) {
+        console.error('Error parsing session timestamp:', e);
+      }
+    }
+
+    // Update timer every second
+    const interval = setInterval(() => {
+      setSessionTimeRemaining(prev => {
+        const remaining = Math.max(prev - 1000, 0);
+        if (remaining === 0) {
+          // Session expired
+          localStorage.removeItem(`table_session_${tableId}`);
+          window.location.reload();
+        }
+        return remaining;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [sessionId, tableId]);
 
   useEffect(() => {
     wsService.connect();
@@ -294,6 +327,7 @@ export default function TablePage() {
       });
     }
   };
+
 
   if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
     return (
@@ -427,20 +461,33 @@ export default function TablePage() {
         {sessionId && (
           <Card className="max-w-md mx-auto mb-4 bg-primary/5">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Session ID:</p>
-                  <p className="text-lg font-mono font-bold">{sessionId}</p>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Share this session ID with your table:</p>
+                    <p className="text-lg font-mono font-bold">{sessionId}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={copySessionId}
+                    className="h-8 w-8"
+                    title="Copy session ID"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={copySessionId}
-                  className="h-8 w-8"
-                  title="Copy session ID"
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
+                <div className="text-sm text-muted-foreground">
+                  <p>Session expires in: {Math.floor(sessionTimeRemaining / 60000)} minutes</p>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                    <div
+                      className="bg-primary h-1.5 rounded-full transition-all duration-1000"
+                      style={{
+                        width: `${(sessionTimeRemaining / (60 * 60 * 1000)) * 100}%`
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
