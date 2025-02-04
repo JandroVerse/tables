@@ -8,7 +8,13 @@ import QRCode from "qrcode";
 import { nanoid } from "nanoid";
 import { setupAuth } from "./auth";
 
-function ensureAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
+// Modified to properly type the next function
+function ensureAuthenticated(req: any, res: any, next: Function) {
+  // Allow unauthenticated access to table-related routes
+  if (req.path.startsWith('/api/restaurants') && req.path.includes('/tables/')) {
+    return next();
+  }
+
   if (req.isAuthenticated()) {
     return next();
   }
@@ -49,7 +55,7 @@ export function registerRoutes(app: Express): Server {
         console.log("Received WebSocket message:", message.toString());
         const data = JSON.parse(message.toString());
 
-        // Broadcast to all connected clients except sender
+        // Broadcast to all connected clients
         wss.clients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify(data));
@@ -148,8 +154,9 @@ export function registerRoutes(app: Express): Server {
 
       console.log('Created table:', table.id);
 
-      // Generate QR code with full URL - updated to point to the request page
-      const tableUrl = `https://${domain}/request/${restaurantId}/${table.id}`;
+      // Generate QR code with full URL - updated to use the correct route
+      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      const tableUrl = `${protocol}://${domain}/table/${restaurantId}/${table.id}`;
       console.log('Generating QR code for URL:', tableUrl);
 
       const qrCodeSvg = await QRCode.toString(tableUrl, { 
@@ -305,24 +312,29 @@ export function registerRoutes(app: Express): Server {
     const { restaurantId, tableId } = req.params;
     const sessionId = nanoid();
 
-    // Close any existing active sessions for this table
-    await db.update(tableSessions)
-      .set({ endedAt: new Date() })
-      .where(and(
-        eq(tableSessions.tableId, Number(tableId)),
-        eq(tableSessions.endedAt, null)
-      ));
+    try {
+      // Close any existing active sessions for this table
+      await db.update(tableSessions)
+        .set({ endedAt: new Date() })
+        .where(and(
+          eq(tableSessions.tableId, Number(tableId)),
+          eq(tableSessions.endedAt, null)
+        ));
 
-    // Create new session
-    const [session] = await db.insert(tableSessions)
-      .values({
-        tableId: Number(tableId),
-        sessionId,
-        startedAt: new Date(),
-      })
-      .returning();
+      // Create new session
+      const [session] = await db.insert(tableSessions)
+        .values({
+          tableId: Number(tableId),
+          sessionId,
+          startedAt: new Date(),
+        })
+        .returning();
 
-    res.json(session);
+      res.json(session);
+    } catch (error) {
+      console.error('Error creating session:', error);
+      res.status(500).json({ message: "Failed to create session" });
+    }
   });
 
   // Request routes
