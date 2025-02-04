@@ -27,11 +27,15 @@ import { Plus, Minus, GlassWater, Bell, Receipt, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect, useState } from "react";
-import type { Request } from "@db/schema";
+import type { Request, Table } from "@db/schema";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedBackground } from "@/components/animated-background";
 import { useParams } from "wouter";
+
+interface RequestWithTable extends Request {
+  table: Table;
+}
 
 const cardVariants = {
   initial: { opacity: 0, y: 20 },
@@ -134,7 +138,7 @@ export default function TablePage() {
     };
   }, [tableId, queryClient]);
 
-  const { data: requests = [], refetch: refetchRequests } = useQuery<Request[]>({
+  const { data: requests = [], refetch: refetchRequests } = useQuery<RequestWithTable[]>({
     queryKey: ["/api/requests", tableId],
     queryFn: async () => {
       if (!sessionId) return [];

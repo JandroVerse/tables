@@ -343,18 +343,32 @@ export function registerRoutes(app: Express): Server {
     let query = {};
 
     if (tableId && sessionId) {
-      query = {
+      const allRequests = await db.query.requests.findMany({
         where: and(
           eq(requests.tableId, Number(tableId)),
           eq(requests.sessionId, sessionId as string)
-        )
-      };
+        ),
+        with: {
+          table: true
+        }
+      });
+      res.json(allRequests);
     } else if (tableId) {
-      query = { where: eq(requests.tableId, Number(tableId)) };
+      const allRequests = await db.query.requests.findMany({
+        where: eq(requests.tableId, Number(tableId)),
+        with: {
+          table: true
+        }
+      });
+      res.json(allRequests);
+    } else {
+      const allRequests = await db.query.requests.findMany({
+        with: {
+          table: true
+        }
+      });
+      res.json(allRequests);
     }
-
-    const allRequests = await db.query.requests.findMany(query);
-    res.json(allRequests);
   });
 
   app.post("/api/requests", async (req, res) => {
