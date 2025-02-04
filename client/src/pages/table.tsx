@@ -117,15 +117,15 @@ export default function TablePage() {
       // Handle different types of updates
       if (data.type === "new_request" && data.tableId === tableId) {
         console.log('New request received, refreshing...');
-        queryClient.invalidateQueries({ 
+        queryClient.invalidateQueries({
           queryKey: ["/api/requests", tableId],
-          exact: true 
+          exact: true
         });
       } else if (data.type === "update_request" && data.tableId === tableId) {
         console.log('Request updated, refreshing...');
-        queryClient.invalidateQueries({ 
+        queryClient.invalidateQueries({
           queryKey: ["/api/requests", tableId],
-          exact: true 
+          exact: true
         });
       }
     });
@@ -270,7 +270,7 @@ export default function TablePage() {
       });
       return;
     }
-     if (hasActiveRequest("other") && requests.some(
+    if (hasActiveRequest("other") && requests.some(
       (r) => r.type === "other" &&
             r.notes === otherRequestNote &&
             r.status !== "completed"
@@ -542,6 +542,11 @@ export default function TablePage() {
                               <CardContent className="p-4">
                                 <div className="font-medium text-primary">
                                   {request.type}
+                                  {request.table && (
+                                    <span className="ml-2 text-sm text-muted-foreground">
+                                      ({request.table.name})
+                                    </span>
+                                  )}
                                 </div>
                                 {request.notes && (
                                   <div className="text-sm text-gray-600 mt-2">
