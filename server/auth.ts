@@ -11,7 +11,14 @@ import { eq } from "drizzle-orm";
 
 declare global {
   namespace Express {
-    interface User extends User {}
+    interface User {
+      id: number;
+      username: string;
+      email: string;
+      role: string;
+      isAdmin: boolean;
+      createdAt: Date;
+    }
   }
 }
 
@@ -66,38 +73,38 @@ export function setupAuth(app: Express) {
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
-        console.log('Login attempt for username:', username); // Add logging
+        console.log('Login attempt for username:', username);
         const [user] = await getUserByUsername(username);
         if (!user) {
-          console.log('User not found:', username); // Add logging
+          console.log('User not found:', username);
           return done(null, false);
         }
 
         const passwordMatch = await comparePasswords(password, user.password);
-        console.log('Password match result:', passwordMatch); // Add logging
+        console.log('Password match result:', passwordMatch);
 
         if (!passwordMatch) {
-          console.log('Password mismatch for user:', username); // Add logging
+          console.log('Password mismatch for user:', username);
           return done(null, false);
         }
 
-        console.log('Login successful for user:', username); // Add logging
+        console.log('Login successful for user:', username);
         return done(null, user);
       } catch (error) {
-        console.error('Login error:', error); // Add logging
+        console.error('Login error:', error);
         return done(error);
       }
-    }),
+    })
   );
 
-  passport.serializeUser((user: any, done) => {
-    console.log('Serializing user:', user.id); // Add logging
-    done(null, user.id)
+  passport.serializeUser((user: Express.User, done) => {
+    console.log('Serializing user:', user.id);
+    done(null, user.id);
   });
 
   passport.deserializeUser(async (id: number, done) => {
     try {
-      console.log('Deserializing user:', id); // Add logging
+      console.log('Deserializing user:', id);
       const [user] = await db
         .select()
         .from(usersTable)
@@ -105,41 +112,33 @@ export function setupAuth(app: Express) {
         .limit(1);
 
       if (!user) {
-        console.log('User not found during deserialization:', id); // Add logging
+        console.log('User not found during deserialization:', id);
         return done(null, false);
       }
-      console.log('User deserialized successfully:', id); // Add logging
+
+      console.log('User deserialized successfully:', id);
       done(null, user);
     } catch (error) {
-      console.error('Deserialization error:', error); // Add logging
+      console.error('Deserialization error:', error);
       done(error);
     }
   });
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      // Validate username uniqueness
       const [existingUser] = await getUserByUsername(req.body.username);
       if (existingUser) {
         return res.status(400).send("Username already exists");
       }
 
-      // Validate role
-      const role = req.body.role || "user";
-      if (!["user", "admin"].includes(role)) {
-        return res.status(400).send("Invalid role. Must be either 'user' or 'admin'");
-      }
-
-      // Create user with new fields
       const [user] = await db
         .insert(usersTable)
         .values({
           username: req.body.username,
           password: await hashPassword(req.body.password),
-          email: req.body.email || null, // Optional email
-          role: role,
-          isActive: true, // Default to active
-          // createdAt and updatedAt are handled by default values
+          email: req.body.email,
+          role: req.body.role || "user",
+          isAdmin: req.body.role === "admin"
         })
         .returning();
 
@@ -153,15 +152,13 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", passport.authenticate("local"), (req, res) => {
-    console.log('Login successful, user:', req.user); // Add logging
+    console.log('Login successful, user:', req.user);
     res.status(200).json(req.user);
   });
 
   app.post("/api/logout", (req, res, next) => {
-    // Destroy the session completely
     req.session.destroy((err) => {
       if (err) return next(err);
-      // Clear the client-side session cookie
       res.clearCookie('connect.sid');
       res.sendStatus(200);
     });
