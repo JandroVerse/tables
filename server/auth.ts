@@ -5,7 +5,7 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { users as usersTable, type User } from "@db/schema";
+import { users as usersTable } from "@db/schema";
 import { db, pool } from "@db";
 import { eq } from "drizzle-orm";
 
@@ -40,7 +40,7 @@ async function comparePasswords(supplied: string, stored: string) {
 
 async function getUserByUsername(username: string) {
   const foundUsers = await db.select().from(usersTable).where(eq(usersTable.username, username)).limit(1);
-  console.log('Found user:', foundUsers[0]); // Add logging
+  console.log('Found user:', foundUsers[0]);
   return foundUsers;
 }
 
@@ -106,7 +106,14 @@ export function setupAuth(app: Express) {
     try {
       console.log('Deserializing user:', id);
       const [user] = await db
-        .select()
+        .select({
+          id: usersTable.id,
+          username: usersTable.username,
+          email: usersTable.email,
+          role: usersTable.role,
+          isAdmin: usersTable.isAdmin,
+          createdAt: usersTable.createdAt,
+        })
         .from(usersTable)
         .where(eq(usersTable.id, id))
         .limit(1);
