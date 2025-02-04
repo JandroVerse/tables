@@ -145,9 +145,11 @@ export default function TablePage() {
       console.log('Received WebSocket message:', data);
       if (data.type === "new_request" || data.type === "update_request") {
         console.log('Invalidating requests query...');
-        queryClient.invalidateQueries({ 
+        // Force a refetch instead of just invalidating
+        queryClient.refetchQueries({ 
           queryKey: ["/api/requests", tableId, restaurantId],
-          exact: true 
+          exact: true,
+          type: 'active'
         });
       }
     });
@@ -159,7 +161,7 @@ export default function TablePage() {
     };
   }, [tableId, queryClient, restaurantId]);
 
-  const { data: requests = [] } = useQuery<Request[]>({
+  const { data: requests = [], refetch: refetchRequests } = useQuery<Request[]>({
     queryKey: ["/api/requests", tableId, restaurantId],
     queryFn: async () => {
       if (!sessionId) return [];
@@ -172,6 +174,8 @@ export default function TablePage() {
       }));
     },
     enabled: !!tableId && !isNaN(tableId) && !!sessionId && !!tableData && !!restaurantId && !isNaN(restaurantId),
+    // Add polling as a backup for real-time updates
+    refetchInterval: 5000
   });
 
   const { mutate: createRequest } = useMutation({
