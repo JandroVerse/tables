@@ -541,10 +541,13 @@ export default function TablePage() {
                             >
                               <CardContent className="p-4">
                                 <div className="font-medium text-primary">
-                                  {request.type}
+                                  {request.type === "water" ? "Water Refill" :
+                                   request.type === "waiter" ? "Call Waiter" :
+                                   request.type === "check" ? "Get Check" :
+                                   request.type}
                                   {request.table && (
                                     <span className="ml-2 text-sm text-muted-foreground">
-                                      ({request.table.name})
+                                      {request.table.name}
                                     </span>
                                   )}
                                 </div>
@@ -634,10 +637,13 @@ export default function TablePage() {
                             <Card className="overflow-hidden transition-colors hover:bg-green-50/50">
                               <CardContent className="p-4">
                                 <div className="font-medium text-primary">
-                                  {request.type}
+                                  {request.type === "water" ? "Water Refill" :
+                                   request.type === "waiter" ? "Call Waiter" :
+                                   request.type === "check" ? "Get Check" :
+                                   request.type}
                                   {request.table && (
                                     <span className="ml-2 text-sm text-muted-foreground">
-                                      ({request.table.name})
+                                      {request.table.name}
                                     </span>
                                   )}
                                 </div>
