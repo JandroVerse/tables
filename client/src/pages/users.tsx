@@ -68,7 +68,10 @@ export default function UsersPage() {
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: number) => {
       const res = await apiRequest("DELETE", `/api/users/${userId}`);
-      if (!res.ok) throw new Error("Failed to delete user");
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to delete user");
+      }
       return res.json();
     },
     onSuccess: () => {
