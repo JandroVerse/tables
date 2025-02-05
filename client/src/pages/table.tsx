@@ -723,40 +723,6 @@ export default function TablePage() {
         transition={{ duration: 0.5 }}
         className="relative container mx-auto max-w-4xl p-4"
       >
-        {sessionId && (
-          <Card className="mb-4">
-            <CardContent className="p-4">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Share this session ID with your table:</p>
-                    <p className="text-lg font-mono font-bold text-foreground">{sessionId}</p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={copySessionId}
-                    className="h-8 w-8"
-                    title="Copy session ID"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  <p>Session expires in: {Math.floor(sessionTimeRemaining / 60000)} minutes</p>
-                  <div className="w-full bg-muted rounded-full h-1.5 mt-1">
-                    <div
-                      className="bg-primary h-1.5 rounded-full transition-all duration-1000"
-                      style={{
-                        width: `${(sessionTimeRemaining / (60 * 60 * 1000)) * 100}%`
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
         <Card className="shadow-lg">
           <CardHeader className="pb-4">
             <CardTitle className="text-2xl font-bold text-center">
