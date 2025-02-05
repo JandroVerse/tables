@@ -98,7 +98,6 @@ export default function TablePage() {
   const [sessionInputValue, setSessionInputValue] = useState("");
   const [sessionError, setSessionError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [sessionTimeRemaining, setSessionTimeRemaining] = useState(60 * 60 * 1000);
   const [isSessionEnded, setIsSessionEnded] = useState(false);
 
 
@@ -140,8 +139,6 @@ export default function TablePage() {
                 setCurrentSessionId(data.activeSession.id);
                 setIsSessionPromptOpen(true);
               }
-              setSessionTimeRemaining(data.activeSession.expiresIn);
-
               // Update localStorage with server's session start time
               const savedSession = localStorage.getItem(`table_session_${tableId}`);
               if (savedSession) {
@@ -181,7 +178,6 @@ export default function TablePage() {
             setCurrentSessionId(session.sessionId);
             setSessionId(session.sessionId);
             setIsSessionCreator(true);
-            setSessionTimeRemaining(60 * 60 * 1000);
             queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
             toast({
               title: "Session Created",
@@ -203,33 +199,42 @@ export default function TablePage() {
     }
   }, [restaurantId, tableId]);
 
-  // Timer update effect
   useEffect(() => {
-    if (!sessionId) return;
+    if (!restaurantId || !tableId || !sessionId) return;
 
-    const interval = setInterval(() => {
-      const savedSession = localStorage.getItem(`table_session_${tableId}`);
-      if (savedSession) {
-        try {
-          const { startedAt } = JSON.parse(savedSession);
-          const sessionStartTime = new Date(startedAt).getTime();
-          const elapsed = Date.now() - sessionStartTime;
-          const remaining = Math.max(60 * 60 * 1000 - elapsed, 0);
+    const validateSession = async () => {
+      try {
+        const response = await fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`);
+        const data = await response.json();
 
-          setSessionTimeRemaining(remaining);
-
-          if (remaining === 0) {
-            localStorage.removeItem(`table_session_${tableId}`);
-            window.location.reload();
+        // Handle different session states
+        if (data.shouldClearSession) {
+          // Session is explicitly ended or expired
+          localStorage.removeItem(`table_session_${tableId}`);
+          setLocation('/session-ended');
+        } else if (data.activeSession) {
+          if (data.activeSession.id !== sessionId) {
+            // Different active session exists
+            setCurrentSessionId(data.activeSession.id);
+            setIsSessionPromptOpen(true);
           }
-        } catch (e) {
-          console.error('Error calculating session time:', e);
+        } else if (data.requiresNewSession && !sessionId) {
+          // No active session exists, and we don't have a session
+          return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
         }
+      } catch (error) {
+        console.error('Error validating session:', error);
       }
-    }, 1000);
+    };
+
+    // Initial validation
+    validateSession();
+
+    // Set up periodic validation
+    const interval = setInterval(validateSession, 10000); // Check every 10 seconds
 
     return () => clearInterval(interval);
-  }, [sessionId, tableId]);
+  }, [restaurantId, tableId, sessionId, setLocation]);
 
   // Update the useEffect for WebSocket handling
   useEffect(() => {
@@ -421,45 +426,6 @@ export default function TablePage() {
     },
   });
 
-  useEffect(() => {
-    if (!restaurantId || !tableId || !sessionId) return;
-
-    const validateSession = async () => {
-      try {
-        const response = await fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`);
-        const data = await response.json();
-
-        // Handle different session states
-        if (data.shouldClearSession) {
-          // Session is explicitly ended or expired
-          localStorage.removeItem(`table_session_${tableId}`);
-          setLocation('/session-ended');
-        } else if (data.activeSession) {
-          if (data.activeSession.id !== sessionId) {
-            // Different active session exists
-            setCurrentSessionId(data.activeSession.id);
-            setIsSessionPromptOpen(true);
-          } else {
-            // Current session is valid, update expiry time
-            setSessionTimeRemaining(data.activeSession.expiresIn);
-          }
-        } else if (data.requiresNewSession && !sessionId) {
-          // No active session exists, and we don't have a session
-          return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
-        }
-      } catch (error) {
-        console.error('Error validating session:', error);
-      }
-    };
-
-    // Initial validation
-    validateSession();
-
-    // Set up periodic validation
-    const interval = setInterval(validateSession, 10000); // Check every 10 seconds
-
-    return () => clearInterval(interval);
-  }, [restaurantId, tableId, sessionId, setLocation]);
 
   if (isSessionEnded) {
     return (
@@ -723,6 +689,25 @@ export default function TablePage() {
         transition={{ duration: 0.5 }}
         className="relative container mx-auto max-w-4xl p-4"
       >
+        <Card className="mb-4">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Share this session ID with your table:</p>
+                <p className="text-lg font-mono font-bold text-foreground">{sessionId}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={copySessionId}
+                className="h-8 w-8"
+                title="Copy session ID"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
         <Card className="shadow-lg">
           <CardHeader className="pb-4">
             <CardTitle className="text-2xl font-bold text-center">
@@ -992,7 +977,6 @@ export default function TablePage() {
         )}
       </motion.div>
     </div>
-
   );
 }
 
