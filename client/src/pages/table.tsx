@@ -189,7 +189,7 @@ export default function TablePage() {
           console.error("Failed to verify table or create session:", error);
           toast({
             title: "Error",
-            description: "This table appears to be invalid or no longer exists.",
+            description: "This table appears to be invalid or no longer exists. Please refresh the page.",
             variant: "destructive",
           });
         })
@@ -224,6 +224,11 @@ export default function TablePage() {
         }
       } catch (error) {
         console.error('Error validating session:', error);
+        toast({
+          title: "Error",
+          description: "Your session has expired. Please refresh the page to start a new session.",
+          variant: "destructive",
+        })
       }
     };
 
@@ -342,6 +347,7 @@ export default function TablePage() {
         if (data.shouldClearSession) {
           localStorage.removeItem(`table_session_${tableId}`);
           setLocation('/session-ended');
+          throw new Error("Your session has expired. Please refresh the page to start a new session.");
         }
         throw new Error(data.message);
       }
@@ -447,14 +453,14 @@ export default function TablePage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground mb-6">
-              This table's session has been ended by staff. To start a new session, please scan the QR code again.
+              This table's session has been ended. To start a new session, please refresh the page.
             </p>
             <div className="flex justify-center">
               <Button
                 variant="outline"
                 onClick={() => window.location.reload()}
               >
-                Scan New QR Code
+                Refresh Page
               </Button>
             </div>
           </CardContent>
@@ -955,7 +961,7 @@ export default function TablePage() {
         {isSessionCreator && (
           <div className="mt-6">
             <AlertDialog>
-              <AlertDialogTrigger asChild>
+                            <AlertDialogTrigger asChild>
                 <Button
                   variant="destructive"
                   className="w-full"

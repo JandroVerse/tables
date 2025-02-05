@@ -20,14 +20,14 @@ export default function SessionEndedPage() {
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground mb-6">
-            This table's session has been ended by staff. To start a new session, please scan the QR code again.
+            This table's session has been ended by staff. Please refresh the page or scan the QR code again to start a new session.
           </p>
           <div className="flex justify-center">
             <Button
               variant="outline"
               onClick={() => window.location.reload()}
             >
-              Scan New QR Code
+              Refresh Page
             </Button>
           </div>
         </CardContent>
