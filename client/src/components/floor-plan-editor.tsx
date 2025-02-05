@@ -51,6 +51,7 @@ interface TableSession {
   tableId: number;
   startedAt: string;
   endedAt: string | null;
+  table: Table | null; // Added table property
 }
 
 interface DraggableTableProps {
@@ -393,6 +394,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
   const { data: tableSessions = [] } = useQuery<TableSession[]>({
     queryKey: [`/api/restaurants/${restaurantId}/table-sessions`],
+    refetchInterval: 5000, // Refresh every 5 seconds
   });
 
   const { mutate: updateTablePosition } = useMutation({
@@ -493,8 +495,9 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   };
 
   const getTableActiveSession = (tableId: number) => {
+    if (!tableSessions) return false;
     return tableSessions.some(
-      session => session.tableId === tableId && !session.endedAt
+      session => session.table && session.table.id === tableId && !session.endedAt
     );
   };
 

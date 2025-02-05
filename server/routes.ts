@@ -760,18 +760,29 @@ export function registerRoutes(app: Express): Server {
         const { restaurantId } = req.params;
 
         try {
-            // Get all table sessions for the restaurant's tables
+            // Get active sessions for tables in this restaurant
             const sessions = await db.query.tableSessions.findMany({
                 where: isNull(tableSessions.endedAt),
                 with: {
-                    table: true,
-                },
+                    table: {
+                        columns: {
+                            id: true,
+                            restaurantId: true
+                        }
+                    }
+                }
             });
 
-            // Filter sessions to only include those for tables in this restaurant
-            const restaurantSessions = sessions.filter(
-                session => session.table.restaurantId === Number(restaurantId)
+            // Filter out sessions where table is null or doesn't belong to this restaurant
+            const restaurantSessions = sessions.filter(session =>
+                session.table && session.table.restaurantId === Number(restaurantId)
             );
+
+            console.log('Found sessions:', {
+                restaurantId,
+                totalActiveSessions: sessions.length,
+                restaurantSessions: restaurantSessions.length
+            });
 
             res.json(restaurantSessions);
         } catch (error) {
