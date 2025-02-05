@@ -513,13 +513,13 @@ export default function TablePage() {
   if (!sessionId) return <div>Initializing table session...</div>;
 
   const renderRequests = (requestsToRender: RequestWithTable[]) => {
-    // Group similar active requests
+    // Group similar requests by type, notes, and status
+    const activeStatuses = ["pending", "in_progress"];
     const groupedRequests = requestsToRender.reduce((acc, request) => {
-      // Only group active requests
-      if (request.status !== "pending" && request.status !== "in_progress") {
-        // For non-active requests, create individual entries
-        const key = `${request.id}`;
-        acc[key] = {
+      // Only group active requests (pending or in_progress)
+      if (!activeStatuses.includes(request.status)) {
+        // For completed or cleared requests, create individual entries
+        acc[`single-${request.id}`] = {
           request,
           count: 1,
           ids: [request.id]
@@ -527,6 +527,7 @@ export default function TablePage() {
         return acc;
       }
 
+      // For active requests, group by type and notes
       const key = `${request.type}-${request.notes || ''}-${request.status}`;
       if (!acc[key]) {
         acc[key] = {
