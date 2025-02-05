@@ -515,7 +515,19 @@ export default function TablePage() {
   const renderRequests = (requestsToRender: RequestWithTable[]) => {
     // Group similar active requests
     const groupedRequests = requestsToRender.reduce((acc, request) => {
-      const key = `${request.type}-${request.notes || ''}`;
+      // Only group active requests
+      if (request.status !== "pending" && request.status !== "in_progress") {
+        // For non-active requests, create individual entries
+        const key = `${request.id}`;
+        acc[key] = {
+          request,
+          count: 1,
+          ids: [request.id]
+        };
+        return acc;
+      }
+
+      const key = `${request.type}-${request.notes || ''}-${request.status}`;
       if (!acc[key]) {
         acc[key] = {
           request,
@@ -907,7 +919,7 @@ export default function TablePage() {
                   ))}
                 </TabsContent>
                 <TabsContent value="completed" className="mt-4">
-                  {renderRequests(requests.filter((r) => r.status === "completed"))}
+                  {renderRequests(requests.filter((r) => r.status === "completed" || r.status === "cleared"))}
                 </TabsContent>
               </Tabs>
             )}
