@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -710,24 +711,24 @@ export default function TablePage() {
   };
 
   return (
-    <div className="min-h-screen">
-      <div className="relative z-0">
+    <div className="min-h-screen bg-background">
+      <div className="fixed inset-0 z-0">
         <AnimatedBackground />
       </div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative z-10 p-4"
+        className="relative z-10 p-4 container mx-auto max-w-4xl"
       >
         {sessionId && (
-          <Card className="max-w-md mx-auto mb-4 bg-primary/5">
+          <Card className="mb-4 bg-card">
             <CardContent className="p-4">
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Share this session ID with your table:</p>
-                    <p className="text-lg font-mono font-bold">{sessionId}</p>
+                    <p className="text-lg font-mono font-bold text-foreground">{sessionId}</p>
                   </div>
                   <Button
                     variant="outline"
@@ -741,7 +742,7 @@ export default function TablePage() {
                 </div>
                 <div className="text-sm text-muted-foreground">
                   <p>Session expires in: {Math.floor(sessionTimeRemaining / 60000)} minutes</p>
-                  <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                  <div className="w-full bg-muted rounded-full h-1.5 mt-1">
                     <div
                       className="bg-primary h-1.5 rounded-full transition-all duration-1000"
                       style={{
@@ -754,9 +755,9 @@ export default function TablePage() {
             </CardContent>
           </Card>
         )}
-        <Card className="max-w-md mx-auto shadow-lg border-0">
+        <Card className="shadow-lg border-0 bg-card">
           <CardHeader className="pb-4">
-            <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary/90 to-primary bg-clip-text text-transparent">
+            <CardTitle className="text-2xl font-bold text-center text-foreground">
               How can we help you?
             </CardTitle>
           </CardHeader>
@@ -912,105 +913,98 @@ export default function TablePage() {
                 </AlertDialog>
               </motion.div>
 
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <motion.div
-                  variants={buttonVariants}
-                  initial="idle"
-                  whileHover="hover"
-                  whileTap="tap"
-                >
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="h-28 w-full flex flex-col items-center justify-center space-y-3"
-                    onClick={() => setIsDialogOpen(true)}
-                  >
-                    <Clock className="h-8 w-8" />
-                    <span className="font-medium">Other Request</span>
-                  </Button>
-                </motion.div>
-                <DialogContent>
-                  <DialogHeader className="p-6 pb-0">
-                    <DialogTitle className="text-xl font-semibold">
-                      Other Request
-                    </DialogTitle>
-                  </DialogHeader>
-                  <div className="px-6 py-4">
-                    <div className="space-y-3">
-                      <Label htmlFor="message" className="text-sm font-medium">
-                        Your Request
-                      </Label>
-                      <Input
-                        id="message"
-                        placeholder="Type your request here..."
-                        value={otherRequestNote}
-                        onChange={(e) => setOtherRequestNote(e.target.value)}
-                        className="min-h-[40px]"
-                        autoFocus={false}
-                        tabIndex={-1}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter className="p-6 pt-0">
-                    <Button onClick={handleOtherRequest} className="w-full">
-                      Send Request
+              <div className="space-y-4">
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button
+                      size="lg"
+                      className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                    >
+                      <Plus className="h-8 w-8" />
+                      <span className="font-medium">Other Request</span>
                     </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Other Request</DialogTitle>
+                    </DialogHeader>
+                    <div className="p-6 pt-2">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="notes">Message</Label>
+                          <Input
+                            id="notes"
+                            value={otherRequestNote}
+                            onChange={(e) => setOtherRequestNote(e.target.value)}
+                            placeholder="Enter your request..."
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <DialogFooter className="p-6 pt-0">
+                      <Button onClick={handleOtherRequest} className="w-full">
+                        Send Request
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
 
             {requests.length > 0 && (
-              <Tabs defaultValue="active" className="mt-8">
-                <TabsList className="w-full grid grid-cols-2">
-                  <TabsTrigger value="active">Active Requests</TabsTrigger>
-                  <TabsTrigger value="completed">Completed</TabsTrigger>
+              <Tabs defaultValue="active" className="w-full">
+                <TabsList className="w-full">
+                  <TabsTrigger value="active" className="flex-1">
+                    ActiveRequests
+                  </TabsTrigger>
+                  <TabsTrigger value="completed" className="flex-1">
+                    Completed
+                  </TabsTrigger>
                 </TabsList>
                 <TabsContent value="active" className="mt-4">
-                  {renderRequests(requests.filter(
-                    (r) => r.status !== "completed" && r.status !== "cleared"
-                  ))}
+                  {renderRequests(
+                    requests.filter((r) => r.status !== "completed" && r.status !== "cleared")
+                  )}
                 </TabsContent>
                 <TabsContent value="completed" className="mt-4">
-                  {renderRequests(requests.filter((r) => r.status === "completed" || r.status === "cleared"))}
+                  {renderRequests(
+                    requests.filter((r) => r.status === "completed" || r.status === "cleared")
+                  )}
                 </TabsContent>
               </Tabs>
             )}
 
-            {/* Add the Close Session button */}
-            <div className="mt-8 flex justify-center">
+            {isSessionCreator && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
                     variant="destructive"
-                    className="w-full max-w-sm"
+                    className="fixed bottom-4 right-4 shadow-lg"
                   >
-                    Close Table Session
+                    End Session
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Close Session?</AlertDialogTitle>
+                    <AlertDialogTitle>End Session</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will end the current table session. All members will be disconnected and a new session will be required for future requests.
+                      This will end the current session for all users at this table. This action
+                      cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => endSession()}
-                    >
-                      Yes, Close Session
+                    <AlertDialogAction onClick={() => endSession()}>
+                      Yes, end session
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-            </div>
+            )}
 
             {feedbackRequest && (
               <FeedbackDialog
                 request={feedbackRequest}
-                open={true}
                 onClose={() => setFeedbackRequest(null)}
               />
             )}
