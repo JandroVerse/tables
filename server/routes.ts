@@ -63,18 +63,14 @@ export function registerRoutes(app: Express): Server {
             const url = new URL(req.url!, `http://${req.headers.host}`);
             const sessionId = url.searchParams.get('sessionId');
 
-            // Allow connections with valid session ID for table clients
+            // Allow connections with sessionId (for table connections)
             if (sessionId) {
+                // Allow connection, session validity will be checked per message
                 return true;
             }
 
-            // Allow authenticated admin connections
-            if (req.isAuthenticated?.()) {
-                return true;
-            }
-
-            // Reject all other connections
-            return false;
+            // For admin connections, check if authenticated
+            return req.isAuthenticated?.() || false;
         }
     });
 
