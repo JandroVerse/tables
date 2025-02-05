@@ -244,10 +244,15 @@ export function registerRoutes(app: Express): Server {
                         .set({ endedAt: now })
                         .where(eq(tableSessions.id, activeSession.id));
 
-                    res.json({ valid: true, table, requiresNewSession: true });
+                    return res.json({
+                        valid: true,
+                        table,
+                        shouldClearSession: true,
+                        reason: 'expired'
+                    });
                 } else {
                     // Active session exists
-                    res.json({
+                    return res.json({
                         valid: true,
                         table,
                         activeSession: {
@@ -258,8 +263,12 @@ export function registerRoutes(app: Express): Server {
                     });
                 }
             } else {
-                // No active session found
-                res.json({ valid: true, table, requiresNewSession: true });
+                // No active session found, allow creating a new one
+                return res.json({
+                    valid: true,
+                    table,
+                    requiresNewSession: true
+                });
             }
         } catch (error) {
             console.error('Error verifying table:', error);
@@ -566,7 +575,7 @@ export function registerRoutes(app: Express): Server {
                 }
             });
 
-            res.json({ 
+            res.json({
                 message: "Session ended successfully",
                 updatedRequestsCount: updatedRequests.length
             });

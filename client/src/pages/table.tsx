@@ -417,6 +417,46 @@ export default function TablePage() {
     },
   });
 
+  useEffect(() => {
+    if (!restaurantId || !tableId || !sessionId) return;
+
+    const validateSession = async () => {
+      try {
+        const response = await fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`);
+        const data = await response.json();
+
+        // Handle different session states
+        if (data.shouldClearSession) {
+          // Session is explicitly ended or expired
+          localStorage.removeItem(`table_session_${tableId}`);
+          setLocation('/session-ended');
+        } else if (data.activeSession) {
+          if (data.activeSession.id !== sessionId) {
+            // Different active session exists
+            setCurrentSessionId(data.activeSession.id);
+            setIsSessionPromptOpen(true);
+          } else {
+            // Current session is valid, update expiry time
+            setSessionTimeRemaining(data.activeSession.expiresIn);
+          }
+        } else if (data.requiresNewSession && !sessionId) {
+          // No active session exists, and we don't have a session
+          return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
+        }
+      } catch (error) {
+        console.error('Error validating session:', error);
+      }
+    };
+
+    // Initial validation
+    validateSession();
+
+    // Set up periodic validation
+    const interval = setInterval(validateSession, 10000); // Check every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [restaurantId, tableId, sessionId, setLocation]);
+
   if (isSessionEnded) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -916,9 +956,7 @@ export default function TablePage() {
                   <DialogFooter className="p-6 pt-0">
                     <Button onClick={handleOtherRequest} className="w-full">
                       Send Request
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
+                    </Button>                  </DialogFooter                </DialogContent>
               </Dialog>
             </div>
 
