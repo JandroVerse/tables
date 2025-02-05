@@ -426,6 +426,14 @@ export default function TablePage() {
     },
   });
 
+  useEffect(() => {
+    if (isSessionEnded) {
+      // Clear any existing history
+      window.history.replaceState(null, '', '/session-ended');
+      setLocation('/session-ended');
+    }
+  }, [isSessionEnded, setLocation]);
+
 
   if (isSessionEnded) {
     return (

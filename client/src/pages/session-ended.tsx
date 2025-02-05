@@ -1,24 +1,38 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
 
 export default function SessionEndedPage() {
   useEffect(() => {
-    // Replace the current history entry with session-ended
-    // This removes the previous page from history
+    // Clear out the history stack
     window.history.replaceState(null, '', '/session-ended');
 
-    // Push a new state to prevent going back
-    window.history.pushState(null, '', '/session-ended');
-
-    // Handle any attempts to go back
-    const handlePopState = () => {
+    // Force the page to stay on session-ended
+    const preventNavigation = (e: PopStateEvent) => {
       window.history.pushState(null, '', '/session-ended');
     };
 
-    window.addEventListener('popstate', handlePopState);
+    const preventReload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Chrome requires returnValue to be set
+      e.returnValue = '';
+    };
+
+    // Periodically ensure we're on the session-ended page
+    const interval = setInterval(() => {
+      if (window.location.pathname !== '/session-ended') {
+        window.history.replaceState(null, '', '/session-ended');
+      }
+    }, 100);
+
+    // Handle both popstate and beforeunload events
+    window.addEventListener('popstate', preventNavigation);
+    window.addEventListener('beforeunload', preventReload);
 
     return () => {
-      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('popstate', preventNavigation);
+      window.removeEventListener('beforeunload', preventReload);
+      clearInterval(interval);
     };
   }, []);
 
@@ -30,8 +44,16 @@ export default function SessionEndedPage() {
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground mb-6">
-            This table's session has been ended. Please scan the QR code again to start a new session.
+            This table's session has been ended by staff. To start a new session, please scan the QR code again.
           </p>
+          <div className="flex justify-center">
+            <Button
+              variant="outline"
+              onClick={() => window.location.reload()}
+            >
+              Scan New QR Code
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
