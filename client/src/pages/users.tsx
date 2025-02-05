@@ -17,20 +17,12 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { Trash2 } from "lucide-react";
 
-interface Restaurant {
-  id: number;
-  name: string;
-  address?: string;
-  phone?: string;
-}
-
 interface User {
   id: number;
   username: string;
   email: string;
   password: string;
   role: "owner" | "staff";
-  restaurants?: Restaurant[];
 }
 
 export default function UsersPage() {
@@ -42,26 +34,7 @@ export default function UsersPage() {
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/users");
       if (!res.ok) throw new Error("Failed to fetch users");
-      const users = await res.json();
-
-      // Fetch restaurants for each user
-      const usersWithRestaurants = await Promise.all(
-        users.map(async (user) => {
-          if (user.role === "owner") {
-            const restaurantsRes = await apiRequest(
-              "GET",
-              `/api/restaurants?userId=${user.id}`
-            );
-            if (restaurantsRes.ok) {
-              const restaurants = await restaurantsRes.json();
-              return { ...user, restaurants };
-            }
-          }
-          return { ...user, restaurants: [] };
-        })
-      );
-
-      return usersWithRestaurants;
+      return res.json();
     },
   });
 
@@ -70,7 +43,7 @@ export default function UsersPage() {
       const res = await apiRequest("DELETE", `/api/users/${userId}`);
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || "Failed to delete user");
+        throw new Error(error.message);
       }
       return res.json();
     },
@@ -83,12 +56,17 @@ export default function UsersPage() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: "Cannot Delete User",
         description: error.message,
         variant: "destructive",
       });
     },
   });
+
+  // Format password to show only first 6 characters + "..."
+  const formatPassword = (password: string) => {
+    return password.substring(0, 6) + "...";
+  };
 
   if (!currentUser || currentUser.role !== "owner") {
     return (
@@ -104,14 +82,6 @@ export default function UsersPage() {
     );
   }
 
-  // Function to truncate password
-  const formatPassword = (password: string) => {
-    if (password.length > 12) {
-      return `${password.substring(0, 12)}...`;
-    }
-    return password;
-  };
-
   return (
     <div className="container mx-auto p-6">
       <Card>
@@ -124,7 +94,7 @@ export default function UsersPage() {
               <Card key={user.id}>
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
-                    <div className="space-y-2 flex-grow">
+                    <div className="space-y-2">
                       <p className="font-medium">{user.username}</p>
                       <p className="text-sm text-muted-foreground">{user.email}</p>
                       <p className="text-sm text-muted-foreground">
@@ -133,20 +103,6 @@ export default function UsersPage() {
                       <p className="text-sm text-muted-foreground capitalize">
                         Role: {user.role}
                       </p>
-                      {user.role === "owner" && user.restaurants && user.restaurants.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-sm font-medium">Restaurants:</p>
-                          <ul className="list-disc list-inside">
-                            {user.restaurants.map((restaurant) => (
-                              <li key={restaurant.id} className="text-sm text-muted-foreground">
-                                {restaurant.name}
-                                {restaurant.address && ` - ${restaurant.address}`}
-                                {restaurant.phone && ` - ${restaurant.phone}`}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
                     </div>
                     {user.id !== currentUser.id && (
                       <AlertDialog>
