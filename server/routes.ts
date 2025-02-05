@@ -14,26 +14,34 @@ import { IncomingMessage } from 'http';
 function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
     // Allow unauthenticated access to table-related routes and WebSocket connections
     const publicPaths = [
-        '/api/restaurants/*/tables/*/verify',
-        '/api/restaurants/*/tables/*/sessions',
-        '/api/restaurants/*/tables/*/sessions/end',
-        '/api/requests',
-        '/ws'
+        // Add exact regex patterns for public paths
+        new RegExp('^/api/restaurants/\\d+/tables/\\d+/verify$'),
+        new RegExp('^/api/restaurants/\\d+/tables/\\d+/sessions$'),
+        new RegExp('^/api/restaurants/\\d+/tables/\\d+/sessions/end$'),
+        new RegExp('^/api/requests$'),
+        new RegExp('^/ws$')
     ];
 
     // Check if the current path matches any of the public paths
-    const isPublicPath = publicPaths.some(pattern => {
-        const regex = new RegExp('^' + pattern.replace(/\*/g, '[^/]+') + '$');
-        return regex.test(req.path);
+    const isPublicPath = publicPaths.some(regex => regex.test(req.path));
+
+    console.log('[Auth Debug]', {
+        path: req.path,
+        isPublic: isPublicPath,
+        isAuthenticated: req.isAuthenticated(),
+        method: req.method
     });
 
-    if (isPublicPath) {
+    if (isPublicPath || req.isAuthenticated()) {
         return next();
     }
 
-    if (req.isAuthenticated()) {
-        return next();
-    }
+    console.log('[Auth Failed]', {
+        path: req.path,
+        method: req.method,
+        headers: req.headers
+    });
+
     res.status(401).json({ message: "Not authenticated" });
 }
 
@@ -507,6 +515,7 @@ export function registerRoutes(app: Express): Server {
             res.status(500).json({ message: "Failed to create session" });
         }
     });
+
 
 
     app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions/end", async (req: Request, res: Response) => {
