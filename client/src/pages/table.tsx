@@ -965,45 +965,20 @@ export default function TablePage() {
                 </TabsList>
                 <TabsContent value="active" className="mt-4">
                   {renderRequests(
-                    requests.filter((r) => r.status !== "completed" && r.status !== "cleared")
+                    requests.filter(
+                      (r) => !["completed", "cleared"].includes(r.status)
+                    )
                   )}
                 </TabsContent>
                 <TabsContent value="completed" className="mt-4">
                   {renderRequests(
-                    requests.filter((r) => r.status === "completed" || r.status === "cleared")
+                    requests.filter((r) =>
+                      ["completed", "cleared"].includes(r.status)
+                    )
                   )}
                 </TabsContent>
               </Tabs>
             )}
-
-            {isSessionCreator && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    className="fixed bottom-4 right-4 shadow-lg"
-                  >
-                    End Session
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent className="bg-white dark:bg-slate-900">
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>End Session</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will end the current session for all users at this table. This action
-                      cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => endSession()}>
-                      Yes, end session
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-
             {feedbackRequest && (
               <FeedbackDialog
                 request={feedbackRequest}
@@ -1013,8 +988,45 @@ export default function TablePage() {
             )}
           </CardContent>
         </Card>
+
+        {/* End Session button moved to bottom */}
+        {isSessionCreator && (
+          <div className="mt-6">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  size="lg"
+                >
+                  End Session
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="bg-white dark:bg-slate-900">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>End Session</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to end this session? All pending
+                    requests will be cleared and the table will be available
+                    for new sessions.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => endSession()}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Yes, End Session
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
       </motion.div>
     </div>
+
   );
 }
 

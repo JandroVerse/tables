@@ -114,7 +114,9 @@ class WebSocketService {
     }
 
     this.pingInterval = window.setInterval(() => {
-      this.send({ type: 'ping', timestamp: new Date().toISOString() });
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.send({ type: 'ping', timestamp: new Date().toISOString() });
+      }
     }, 30000);
   }
 
