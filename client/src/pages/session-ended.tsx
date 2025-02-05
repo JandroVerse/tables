@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
 
 export default function SessionEndedPage() {
@@ -19,17 +18,9 @@ export default function SessionEndedPage() {
           <CardTitle>Session Ended</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground mb-6">
-            This table's session has been ended by staff. Please refresh the page or scan the QR code again to start a new session.
+          <p className="text-muted-foreground">
+            This table's session has ended. Please scan the QR code again to start a new session.
           </p>
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              onClick={() => window.location.reload()}
-            >
-              Refresh Page
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>

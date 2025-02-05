@@ -452,17 +452,9 @@ export default function TablePage() {
             <CardTitle>Session Ended</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-6">
-              This table's session has been ended. To start a new session, please refresh the page.
+            <p className="text-muted-foreground">
+              This table's session has ended. Please scan the QR code again to start a new session.
             </p>
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => window.location.reload()}
-              >
-                Refresh Page
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -961,7 +953,7 @@ export default function TablePage() {
         {isSessionCreator && (
           <div className="mt-6">
             <AlertDialog>
-                            <AlertDialogTrigger asChild>
+              <AlertDialogTrigger asChild>
                 <Button
                   variant="destructive"
                   className="w-full"
@@ -974,7 +966,7 @@ export default function TablePage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>End Session</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to end this session? All pending
+                    Are you sure you want                    to end this session? All pending
                     requests will be cleared and the table will be available
                     for new sessions.
                   </AlertDialogDescription>
