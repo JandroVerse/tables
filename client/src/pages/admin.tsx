@@ -84,13 +84,11 @@ export default function AdminPage() {
       form.reset();
     },
     onError: (error: Error) => {
-      // Improve error logging
       toast({
         title: "Error",
         description: "Failed to create restaurant. Please try again.",
         variant: "destructive",
       });
-      // Only log the error message without the full stack trace
       console.error("Restaurant creation failed:", error.message);
     },
   });
@@ -121,7 +119,27 @@ export default function AdminPage() {
     },
   });
 
-  // Helper function to get table name
+  const { mutate: clearCompleted } = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/requests/clear-completed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/requests"] });
+      toast({
+        title: "Cleared completed requests",
+        description: "All completed requests have been cleared.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to clear completed requests. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Failed to clear completed requests:", error);
+    },
+  });
+
   const getTableName = (tableId: number) => {
     const table = tables.find(t => t.id === tableId);
     return table ? `Table ${table.name}` : `Table ${tableId}`;
@@ -134,7 +152,6 @@ export default function AdminPage() {
     completed: "Completed",
   };
 
-  // Get the first restaurant for now (we can add restaurant switching later)
   const currentRestaurant = restaurants[0];
 
   const getSortedRequests = (status: string) => {
@@ -142,10 +159,8 @@ export default function AdminPage() {
       .filter((r) => r.status === status)
       .sort((a, b) => {
         if (status === "completed") {
-          // For completed requests, sort by completedAt in descending order (newest first)
           return new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime();
         } else {
-          // For other statuses, sort by createdAt in ascending order (oldest first)
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         }
       });
@@ -244,7 +259,35 @@ export default function AdminPage() {
             >
               <Card className="h-[calc(100vh-300px)]">
                 <CardHeader>
-                  <CardTitle>{statusTitles[status]}</CardTitle>
+                  <div className="flex justify-between items-center">
+                    <CardTitle>{statusTitles[status]}</CardTitle>
+                    {status === "completed" && getSortedRequests("completed").length > 0 && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                            <Button variant="outline" size="sm" className="text-sm">
+                              Clear All
+                            </Button>
+                          </motion.div>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Clear All Completed Requests?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will remove all completed requests from the history.
+                              This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => clearCompleted()}>
+                              Yes, clear all
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <ScrollArea className="h-[calc(100vh-400px)]">
@@ -274,9 +317,9 @@ export default function AdminPage() {
                                   <h3 className="font-medium">
                                     {getTableName(request.tableId)} - {
                                       request.type === "water" ? "Water Refill" :
-                                      request.type === "waiter" ? "Call Waiter" :
-                                      request.type === "check" ? "Get Check" :
-                                      request.type
+                                        request.type === "waiter" ? "Call Waiter" :
+                                          request.type === "check" ? "Get Check" :
+                                            request.type
                                     }
                                   </h3>
                                   {request.notes && (

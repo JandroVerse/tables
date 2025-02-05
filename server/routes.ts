@@ -720,5 +720,40 @@ export function registerRoutes(app: Express): Server {
         res.json(allFeedback);
     });
 
+    app.post("/api/requests/clear-completed", async (req: Request, res: Response) => {
+        try {
+            // Update all completed requests to be cleared
+            const updatedRequests = await db
+                .update(requests)
+                .set({
+                    status: "cleared",
+                    completedAt: new Date()
+                })
+                .where(eq(requests.status, "completed"))
+                .returning();
+
+            // Broadcast the updates to all connected clients
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    updatedRequests.forEach(request => {
+                        client.send(JSON.stringify({
+                            type: "update_request",
+                            request,
+                            tableId: request.tableId
+                        }));
+                    });
+                }
+            });
+
+            res.json({
+                message: "Successfully cleared completed requests",
+                clearedCount: updatedRequests.length
+            });
+        } catch (error) {
+            console.error('Error clearing completed requests:', error);
+            res.status(500).json({ message: "Failed to clear completed requests" });
+        }
+    });
+
     return httpServer;
 }
