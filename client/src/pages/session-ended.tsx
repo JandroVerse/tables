@@ -4,36 +4,12 @@ import { useEffect } from "react";
 
 export default function SessionEndedPage() {
   useEffect(() => {
-    // Clear out the history stack
-    window.history.replaceState(null, '', '/session-ended');
-
-    // Force the page to stay on session-ended
-    const preventNavigation = (e: PopStateEvent) => {
-      window.history.pushState(null, '', '/session-ended');
-    };
-
-    const preventReload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      // Chrome requires returnValue to be set
-      e.returnValue = '';
-    };
-
-    // Periodically ensure we're on the session-ended page
-    const interval = setInterval(() => {
-      if (window.location.pathname !== '/session-ended') {
-        window.history.replaceState(null, '', '/session-ended');
+    // Clear out any remaining session data for all tables
+    for (let key of Object.keys(localStorage)) {
+      if (key.startsWith('table_session_')) {
+        localStorage.removeItem(key);
       }
-    }, 100);
-
-    // Handle both popstate and beforeunload events
-    window.addEventListener('popstate', preventNavigation);
-    window.addEventListener('beforeunload', preventReload);
-
-    return () => {
-      window.removeEventListener('popstate', preventNavigation);
-      window.removeEventListener('beforeunload', preventReload);
-      clearInterval(interval);
-    };
+    }
   }, []);
 
   return (

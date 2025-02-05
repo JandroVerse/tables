@@ -428,11 +428,14 @@ export default function TablePage() {
 
   useEffect(() => {
     if (isSessionEnded) {
-      // Clear any existing history
-      window.history.replaceState(null, '', '/session-ended');
+      // First clear all table session data
+      const currentKey = `table_session_${tableId}`;
+      localStorage.removeItem(currentKey);
+
+      // Then redirect to session-ended
       setLocation('/session-ended');
     }
-  }, [isSessionEnded, setLocation]);
+  }, [isSessionEnded, tableId, setLocation]);
 
 
   if (isSessionEnded) {
@@ -970,8 +973,7 @@ export default function TablePage() {
                     for new sessions.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => endSession()}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
