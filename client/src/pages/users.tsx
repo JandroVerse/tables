@@ -17,12 +17,20 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { Trash2 } from "lucide-react";
 
+interface Restaurant {
+  id: number;
+  name: string;
+  address?: string;
+  phone?: string;
+}
+
 interface User {
   id: number;
   username: string;
   email: string;
   password: string;
   role: "owner" | "staff";
+  restaurants?: Restaurant[];
 }
 
 export default function UsersPage() {
@@ -34,7 +42,26 @@ export default function UsersPage() {
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/users");
       if (!res.ok) throw new Error("Failed to fetch users");
-      return res.json();
+      const users = await res.json();
+
+      // Fetch restaurants for each user
+      const usersWithRestaurants = await Promise.all(
+        users.map(async (user) => {
+          if (user.role === "owner") {
+            const restaurantsRes = await apiRequest(
+              "GET",
+              `/api/restaurants?userId=${user.id}`
+            );
+            if (restaurantsRes.ok) {
+              const restaurants = await restaurantsRes.json();
+              return { ...user, restaurants };
+            }
+          }
+          return { ...user, restaurants: [] };
+        })
+      );
+
+      return usersWithRestaurants;
     },
   });
 
@@ -94,7 +121,7 @@ export default function UsersPage() {
               <Card key={user.id}>
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
-                    <div>
+                    <div className="space-y-2 flex-grow">
                       <p className="font-medium">{user.username}</p>
                       <p className="text-sm text-muted-foreground">{user.email}</p>
                       <p className="text-sm text-muted-foreground">
@@ -103,6 +130,20 @@ export default function UsersPage() {
                       <p className="text-sm text-muted-foreground capitalize">
                         Role: {user.role}
                       </p>
+                      {user.role === "owner" && user.restaurants && user.restaurants.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-sm font-medium">Restaurants:</p>
+                          <ul className="list-disc list-inside">
+                            {user.restaurants.map((restaurant) => (
+                              <li key={restaurant.id} className="text-sm text-muted-foreground">
+                                {restaurant.name}
+                                {restaurant.address && ` - ${restaurant.address}`}
+                                {restaurant.phone && ` - ${restaurant.phone}`}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                     {user.id !== currentUser.id && (
                       <AlertDialog>
