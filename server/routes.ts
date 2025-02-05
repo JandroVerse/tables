@@ -19,20 +19,20 @@ function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
         new RegExp('^/api/restaurants/\\d+/tables/\\d+/sessions$'),
         new RegExp('^/api/restaurants/\\d+/tables/\\d+/sessions/end$'),
         new RegExp('^/api/requests$'),
+        new RegExp('^/api/requests/\\d+$'),
         new RegExp('^/ws$')
     ];
 
     // Check if the current path matches any of the public paths
     const isPublicPath = publicPaths.some(regex => regex.test(req.path));
 
-    console.log('[Auth Debug]', {
-        path: req.path,
-        isPublic: isPublicPath,
-        isAuthenticated: req.isAuthenticated(),
-        method: req.method
-    });
+    // For public paths, always allow access
+    if (isPublicPath) {
+        return next();
+    }
 
-    if (isPublicPath || req.isAuthenticated()) {
+    // For non-public paths, require authentication
+    if (req.isAuthenticated()) {
         return next();
     }
 
@@ -62,7 +62,8 @@ export function registerRoutes(app: Express): Server {
     const wss = new WebSocketServer({
         server: httpServer,
         path: '/ws',
-        verifyClient: ({ req }: { req: IncomingMessage }) => {
+        verifyClient: async ({ req }: { req: IncomingMessage }) => {
+            // Ignore Vite HMR connections
             if (req.headers['sec-websocket-protocol'] === 'vite-hmr') {
                 return false;
             }
@@ -73,11 +74,11 @@ export function registerRoutes(app: Express): Server {
 
             // Allow connections with sessionId (for table connections)
             if (sessionId) {
-                // Allow connection, session validity will be checked per message
                 return true;
             }
 
             // For admin connections, check if authenticated
+            // @ts-ignore: req.isAuthenticated is added by passport
             return req.isAuthenticated?.() || false;
         }
     });
@@ -517,12 +518,32 @@ export function registerRoutes(app: Express): Server {
     });
 
 
-
     app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions/end", async (req: Request, res: Response) => {
         const { restaurantId, tableId } = req.params;
         const { sessionId } = req.body;
 
         try {
+            console.log('Session end requested:', {
+                tableId: Number(tableId),
+                sessionId,
+                timestamp: new Date().toISOString()
+            });
+
+            // Broadcast session end to all connected clients immediately
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({
+                        type: "end_session",
+                        tableId: Number(tableId),
+                        sessionId,
+                        reason: "admin_ended"
+                    }));
+                }
+            });
+
+            // Wait a moment to ensure clients receive the WebSocket message
+            await new Promise(resolve => setTimeout(resolve, 500));
+
             // Close the session by setting endedAt
             await db.update(tableSessions)
                 .set({ endedAt: new Date() })
@@ -549,25 +570,16 @@ export function registerRoutes(app: Express): Server {
                 ))
                 .returning();
 
-            console.log('Session ended, broadcasting to clients:', {
+            console.log('Session ended, requests updated:', {
                 tableId: Number(tableId),
                 sessionId,
                 updatedRequestsCount: updatedRequests.length
             });
 
-            // Broadcast session end to all connected clients immediately
-            wss.clients.forEach((client) => {
-                if (client.readyState === WebSocket.OPEN) {
-                    // Send session end notification first
-                    client.send(JSON.stringify({
-                        type: "end_session",
-                        tableId: Number(tableId),
-                        sessionId,
-                        reason: "admin_ended"
-                    }));
-
-                    // Then send request updates if there were any requests cleared
-                    if (updatedRequests.length > 0) {
+            // Send request updates if there were any requests cleared
+            if (updatedRequests.length > 0) {
+                wss.clients.forEach((client) => {
+                    if (client.readyState === WebSocket.OPEN) {
                         updatedRequests.forEach(request => {
                             client.send(JSON.stringify({
                                 type: "update_request",
@@ -576,8 +588,8 @@ export function registerRoutes(app: Express): Server {
                             }));
                         });
                     }
-                }
-            });
+                });
+            }
 
             res.json({
                 message: "Session ended successfully",

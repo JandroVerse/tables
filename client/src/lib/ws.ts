@@ -56,12 +56,29 @@ class WebSocketService {
           console.log('[WS] Message received:', data);
         }
 
-        // Handle session end message immediately
+        // Handle session end message first and ensure proper cleanup
         if (data.type === 'end_session') {
           const currentTableId = window.location.pathname.match(/\/request\/\d+\/(\d+)/)?.[1];
           if (currentTableId && data.tableId === Number(currentTableId)) {
             console.log('[WS] Session end event received:', data);
             if (data.reason === 'admin_ended' || data.reason === 'expired') {
+              // Stop ping interval and perform cleanup before disconnecting
+              if (this.pingInterval) {
+                clearInterval(this.pingInterval);
+                this.pingInterval = null;
+              }
+
+              // Ensure WebSocket is closed properly
+              if (this.ws) {
+                this.ws.onclose = null; // Remove onclose handler to prevent reconnection attempts
+                this.ws.close();
+                this.ws = null;
+              }
+
+              this.listeners = [];
+              this.isAuthenticated = false;
+
+              // Clear session and redirect
               localStorage.removeItem(`table_session_${currentTableId}`);
               window.location.href = '/session-ended';
               return;
@@ -69,6 +86,7 @@ class WebSocketService {
           }
         }
 
+        // Process other messages if not a session end
         this.listeners.forEach(listener => listener(data));
       } catch (error) {
         console.error('[WS] Error parsing message:', error);
