@@ -21,7 +21,7 @@ interface User {
   id: number;
   username: string;
   email: string;
-  password: string;  // Added password field
+  password: string;
   role: "owner" | "staff";
 }
 
@@ -74,6 +74,14 @@ export default function UsersPage() {
     );
   }
 
+  // Function to truncate password
+  const formatPassword = (password: string) => {
+    if (password.length > 12) {
+      return `${password.substring(0, 12)}...`;
+    }
+    return password;
+  };
+
   return (
     <div className="container mx-auto p-6">
       <Card>
@@ -90,7 +98,7 @@ export default function UsersPage() {
                       <p className="font-medium">{user.username}</p>
                       <p className="text-sm text-muted-foreground">{user.email}</p>
                       <p className="text-sm text-muted-foreground">
-                        Password: {user.password}
+                        Password: {formatPassword(user.password)}
                       </p>
                       <p className="text-sm text-muted-foreground capitalize">
                         Role: {user.role}
