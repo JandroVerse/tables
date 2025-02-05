@@ -36,10 +36,11 @@ class WebSocketService {
       }
     }
 
+    console.log('Connecting to WebSocket:', wsUrl);
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('WebSocket connected successfully');
       this.reconnectAttempts = 0;
       this.startPingInterval();
     };
@@ -135,6 +136,8 @@ class WebSocketService {
     } else {
       if (data.type !== 'ping') {
         console.warn('WebSocket is not connected. Message not sent:', data);
+        // Attempt to reconnect
+        this.connect();
       }
     }
   }

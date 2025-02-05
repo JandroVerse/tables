@@ -235,16 +235,13 @@ export default function TablePage() {
   useEffect(() => {
     wsService.connect();
     const unsubscribe = wsService.subscribe((data) => {
+      console.log('Received WebSocket message in table component:', data);
       if (data.type === "new_request" && data.tableId === tableId) {
-        queryClient.invalidateQueries({
-          queryKey: ["/api/requests", tableId],
-          exact: true
-        });
+        // Force an immediate refetch of requests
+        refetchRequests();
       } else if (data.type === "update_request" && data.tableId === tableId) {
-        queryClient.invalidateQueries({
-          queryKey: ["/api/requests", tableId],
-          exact: true
-        });
+        // Force an immediate refetch of requests
+        refetchRequests();
       } else if (data.type === "end_session" && data.tableId === tableId) {
         // Handle session end event
         localStorage.removeItem(`table_session_${tableId}`);
@@ -257,6 +254,7 @@ export default function TablePage() {
     // Reconnection logic
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        console.log('Page became visible, reconnecting WebSocket');
         wsService.connect();
       }
     };
@@ -268,7 +266,7 @@ export default function TablePage() {
       wsService.disconnect();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [tableId, queryClient, setLocation]);
+  }, [tableId, queryClient, setLocation, refetchRequests]);
 
   const { data: requests = [], refetch: refetchRequests } = useQuery<RequestWithTable[]>({
     queryKey: ["/api/requests", tableId],
