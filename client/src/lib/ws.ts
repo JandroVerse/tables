@@ -51,17 +51,29 @@ class WebSocketService {
           console.log('WebSocket message received:', data);
         }
 
-        // Handle session end message immediately
+        // Handle session end message immediately, before any other processing
         if (data.type === 'end_session') {
           const currentTableId = window.location.pathname.match(/\/request\/\d+\/(\d+)/)?.[1];
           if (currentTableId && data.tableId === Number(currentTableId)) {
-            localStorage.removeItem(`table_session_${currentTableId}`);
-            window.location.href = '/session-ended';
-            return;
+            console.log('Received session end event:', data);
+            // Ensure we handle the session end immediately
+            if (data.reason === 'admin_ended' || data.reason === 'expired') {
+              localStorage.removeItem(`table_session_${currentTableId}`);
+              window.location.href = '/session-ended';
+              // Don't process any more events after session end
+              return;
+            }
           }
         }
 
-        this.listeners.forEach(listener => listener(data));
+        // Only process other events if we haven't handled a session end
+        this.listeners.forEach(listener => {
+          try {
+            listener(data);
+          } catch (error) {
+            console.error('Error in WebSocket listener:', error);
+          }
+        });
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
       }

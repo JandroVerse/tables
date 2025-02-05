@@ -536,17 +536,24 @@ export function registerRoutes(app: Express): Server {
                 ))
                 .returning();
 
-            // Broadcast session end to all connected clients
+            console.log('Session ended, broadcasting to clients:', {
+                tableId: Number(tableId),
+                sessionId,
+                updatedRequestsCount: updatedRequests.length
+            });
+
+            // Broadcast session end to all connected clients immediately
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
-                    // Send session end notification
+                    // Send session end notification first
                     client.send(JSON.stringify({
                         type: "end_session",
                         tableId: Number(tableId),
-                        sessionId
+                        sessionId,
+                        reason: "admin_ended"
                     }));
 
-                    // Also send request updates if there were any requests cleared
+                    // Then send request updates if there were any requests cleared
                     if (updatedRequests.length > 0) {
                         updatedRequests.forEach(request => {
                             client.send(JSON.stringify({
@@ -559,7 +566,10 @@ export function registerRoutes(app: Express): Server {
                 }
             });
 
-            res.json({ message: "Session ended successfully" });
+            res.json({ 
+                message: "Session ended successfully",
+                updatedRequestsCount: updatedRequests.length
+            });
         } catch (error) {
             console.error('Error ending session:', error);
             res.status(500).json({ message: "Failed to end session" });
