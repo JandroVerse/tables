@@ -513,12 +513,28 @@ export default function TablePage() {
   if (!sessionId) return <div>Initializing table session...</div>;
 
   const renderRequests = (requestsToRender: RequestWithTable[]) => {
+    // Group similar active requests
+    const groupedRequests = requestsToRender.reduce((acc, request) => {
+      const key = `${request.type}-${request.notes || ''}`;
+      if (!acc[key]) {
+        acc[key] = {
+          request,
+          count: 1,
+          ids: [request.id]
+        };
+      } else {
+        acc[key].count++;
+        acc[key].ids.push(request.id);
+      }
+      return acc;
+    }, {} as Record<string, { request: RequestWithTable; count: number; ids: number[] }>);
+
     return (
       <AnimatePresence mode="popLayout">
         <div className="space-y-3">
-          {requestsToRender.map((request) => (
+          {Object.values(groupedRequests).map(({ request, count, ids }) => (
             <motion.div
-              key={request.id}
+              key={ids.join('-')}
               layout
               variants={cardVariants}
               initial="initial"
@@ -541,11 +557,16 @@ export default function TablePage() {
                 }`}
               >
                 <CardContent className="p-4">
-                  <div className="font-medium text-primary">
+                  <div className="font-medium text-primary relative">
                     {request.type === "water" ? "Water Refill" :
                       request.type === "waiter" ? "Call Waiter" :
                         request.type === "check" ? "Get Check" :
                           request.type}
+                    {count > 1 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                        {count}
+                      </span>
+                    )}
                     {request.table && (
                       <span className="ml-2 text-sm text-muted-foreground">
                         {request.table.name}
@@ -583,31 +604,31 @@ export default function TablePage() {
                             whileTap="tap"
                           >
                             <Button variant="outline" size="sm">
-                              Cancel Request
+                              Cancel Request{count > 1 ? 's' : ''}
                             </Button>
                           </motion.div>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>
-                              Cancel Request?
+                              Cancel Request{count > 1 ? 's' : ''}?
                             </AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to cancel this
-                              request? This action cannot be
+                              Are you sure you want to cancel {count > 1 ? 'these' : 'this'}{' '}
+                              request{count > 1 ? 's' : ''}? This action cannot be
                               undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>
-                              No, keep it
+                              No, keep {count > 1 ? 'them' : 'it'}
                             </AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() =>
-                                cancelRequest(request.id)
+                                ids.forEach(id => cancelRequest(id))
                               }
                             >
-                              Yes, cancel it
+                              Yes, cancel {count > 1 ? 'them' : 'it'}
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
