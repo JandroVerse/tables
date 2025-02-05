@@ -10,7 +10,6 @@ import NotFound from "@/pages/not-found";
 import SessionEndedPage from "@/pages/session-ended";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
-import UsersPage from "@/pages/users";
 
 function Router() {
   return (
@@ -24,7 +23,6 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <ProtectedRoute path="/admin" component={AdminPage} />
       <ProtectedRoute path="/qr" component={QRPage} />
-      <ProtectedRoute path="/users" component={UsersPage} />
       <Route component={NotFound} />
     </Switch>
   );

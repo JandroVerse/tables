@@ -33,7 +33,7 @@ export default function AuthPage() {
     } else {
       registerMutation.mutate({
         ...data,
-        role: "owner",  // Set role to owner for new registrations
+        role: "owner",
         email: data.email || "",
       });
     }
