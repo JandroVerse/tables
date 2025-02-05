@@ -19,12 +19,13 @@ import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import type { Request, Table, Restaurant } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
 import { AnimatedBackground } from "@/components/animated-background";
+import { LogOut } from "lucide-react";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -187,11 +188,40 @@ export default function AdminPage() {
               ? `${currentRestaurant.name} Dashboard`
               : "Restaurant Admin Dashboard"}
           </h1>
-          <Link href="/qr">
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button variant="outline">View QR Codes</Button>
-            </motion.div>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/qr">
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button variant="outline">View QR Codes</Button>
+              </motion.div>
+            </Link>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button variant="outline">
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </Button>
+                </motion.div>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure you want to logout?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    You will need to login again to access the dashboard.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={async () => {
+                    await apiRequest("POST", "/api/logout");
+                    window.location.href = "/auth";
+                  }}>
+                    Logout
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
 
         {currentRestaurant ? (
