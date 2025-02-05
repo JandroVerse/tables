@@ -2,8 +2,19 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    const text = await res.text();
+    if (res.status === 403) {
+      try {
+        const data = JSON.parse(text);
+        if (data.shouldClearSession) {
+          window.location.href = "/session-ended";
+          return;
+        }
+      } catch (e) {
+        // If the response isn't JSON or doesn't have shouldClearSession, treat as regular error
+      }
+    }
+    throw new Error(`${res.status}: ${text || res.statusText}`);
   }
 }
 
@@ -35,6 +46,20 @@ export const getQueryFn: <T>(options: {
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
+    }
+
+    if (res.status === 403) {
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        if (data.shouldClearSession) {
+          window.location.href = "/session-ended";
+          return null;
+        }
+      } catch (e) {
+        // If not JSON or no shouldClearSession, continue with normal error handling
+      }
+      throw new Error(`${res.status}: ${text}`);
     }
 
     await throwIfResNotOk(res);
