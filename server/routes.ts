@@ -197,9 +197,9 @@ export function registerRoutes(app: Express): Server {
             });
 
             if (userRestaurants.length > 0) {
-                return res.status(400).json({ 
+                return res.status(400).json({
                     message: "Cannot delete user because they own restaurants. Please delete or transfer ownership of their restaurants first.",
-                    restaurants: userRestaurants 
+                    restaurants: userRestaurants
                 });
             }
 
@@ -474,6 +474,53 @@ export function registerRoutes(app: Express): Server {
         } catch (error) {
             console.error('Error clearing completed requests:', error);
             res.status(500).json({ message: "Failed to clear completed requests" });
+        }
+    });
+
+    // Table deletion route
+    app.delete("/api/restaurants/:restaurantId/tables/:tableId", ensureAuthenticated, async (req: Request, res: Response) => {
+        try {
+            const { restaurantId, tableId } = req.params;
+
+            // Verify restaurant ownership
+            const [restaurant] = await db.query.restaurants.findMany({
+                where: and(
+                    eq(restaurants.id, Number(restaurantId)),
+                    eq(restaurants.ownerId, req.user!.id)
+                ),
+            });
+
+            if (!restaurant) {
+                return res.status(404).json({ message: "Restaurant not found" });
+            }
+
+            // Delete the table
+            const [deletedTable] = await db.delete(tables)
+                .where(and(
+                    eq(tables.id, Number(tableId)),
+                    eq(tables.restaurantId, Number(restaurantId))
+                ))
+                .returning();
+
+            if (!deletedTable) {
+                return res.status(404).json({ message: "Table not found" });
+            }
+
+            // Notify connected WebSocket clients about the table deletion
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({
+                        type: "delete_table",
+                        tableId: Number(tableId),
+                        restaurantId: Number(restaurantId)
+                    }));
+                }
+            });
+
+            res.json(deletedTable);
+        } catch (error) {
+            console.error('Error deleting table:', error);
+            res.status(500).json({ message: "Failed to delete table" });
         }
     });
 
