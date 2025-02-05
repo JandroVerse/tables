@@ -4,9 +4,15 @@ import {
   useMutation,
   UseMutationResult,
 } from "@tanstack/react-query";
-import type { User } from "@db/schema";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  role: "owner" | "staff";
+}
 
 type AuthContextType = {
   user: User | null;
@@ -37,9 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
   } = useQuery<User | null>({
     queryKey: ["/api/user"],
-    queryFn: async ({ signal }) => {
+    queryFn: async () => {
       try {
-        const res = await apiRequest("GET", "/api/user", undefined, { signal });
+        const res = await apiRequest("GET", "/api/user");
         if (!res.ok && res.status === 401) return null;
         return res.json();
       } catch (e) {

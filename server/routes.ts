@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
-import { tables, requests, feedback, tableSessions, restaurants } from "@db/schema";
+import { tables, requests, feedback, tableSessions, restaurants, users } from "@db/schema";
 import { eq, and, isNull, or } from "drizzle-orm";
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
@@ -788,6 +788,61 @@ export function registerRoutes(app: Express): Server {
         } catch (error) {
             console.error('Error fetching table sessions:', error);
             res.status(500).json({ message: "Failed to fetch table sessions" });
+        }
+    });
+
+    // User management routes
+    app.get("/api/users", ensureAuthenticated, async (req: Request, res: Response) => {
+        try {
+            // Only owner users can see all users
+            if (req.user?.role !== "owner") {
+                return res.status(403).json({ message: "Only owners can view all users" });
+            }
+
+            const allUsers = await db.query.users.findMany({
+                columns: {
+                    id: true,
+                    username: true,
+                    email: true,
+                    role: true,
+                    password: true,  // Including password (not recommended for production)
+                    createdAt: true
+                }
+            });
+
+            res.json(allUsers);
+        } catch (error) {
+            console.error('Error fetching users:', error);
+            res.status(500).json({ message: "Failed to fetch users" });
+        }
+    });
+
+    app.delete("/api/users/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+        try {
+            const { id } = req.params;
+
+            // Only owner users can delete users
+            if (req.user?.role !== "owner") {
+                return res.status(403).json({ message: "Only owners can delete users" });
+            }
+
+            // Prevent self-deletion
+            if (Number(id) === req.user.id) {
+                return res.status(400).json({ message: "Cannot delete your own account" });
+            }
+
+            const [deletedUser] = await db.delete(users)
+                .where(eq(users.id, Number(id)))
+                .returning();
+
+            if (!deletedUser) {
+                return res.status(404).json({ message: "User not found" });
+            }
+
+            res.json({ message: "User deleted successfully", user: deletedUser });
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            res.status(500).json({ message: "Failed to delete user" });
         }
     });
 
