@@ -31,7 +31,6 @@ import { useEffect, useState } from "react";
 import type { Request, Table } from "@db/schema";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { motion, AnimatePresence } from "framer-motion";
-import { AnimatedBackground } from "@/components/animated-background";
 import { useParams, useLocation } from "wouter";
 
 const cardVariants = {
@@ -235,20 +234,26 @@ export default function TablePage() {
   // Update the useEffect for WebSocket handling
   useEffect(() => {
     wsService.connect();
+
     const unsubscribe = wsService.subscribe((data) => {
       console.log('Received WebSocket message in table component:', data);
-      if (data.type === "new_request" && data.tableId === tableId) {
-        // Force an immediate refetch of requests
-        refetchRequests();
-      } else if (data.type === "update_request" && data.tableId === tableId) {
-        // Force an immediate refetch of requests
-        refetchRequests();
-      } else if (data.type === "end_session" && data.tableId === tableId) {
-        // Handle session end event
-        localStorage.removeItem(`table_session_${tableId}`);
-        setSessionId(null);
-        setIsSessionEnded(true);
-        setLocation('/session-ended');
+
+      // Handle different types of WebSocket messages
+      switch (data.type) {
+        case "new_request":
+        case "update_request":
+          if (data.tableId === tableId) {
+            queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
+          }
+          break;
+        case "end_session":
+          if (data.tableId === tableId) {
+            localStorage.removeItem(`table_session_${tableId}`);
+            setSessionId(null);
+            setIsSessionEnded(true);
+            setLocation('/session-ended');
+          }
+          break;
       }
     });
 
@@ -267,7 +272,7 @@ export default function TablePage() {
       wsService.disconnect();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [tableId, queryClient, setLocation, refetchRequests]);
+  }, [tableId, queryClient, setLocation]);
 
   const { data: requests = [], refetch: refetchRequests } = useQuery<RequestWithTable[]>({
     queryKey: ["/api/requests", tableId],
@@ -712,17 +717,14 @@ export default function TablePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="fixed inset-0 z-0">
-        <AnimatedBackground />
-      </div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative z-10 p-4 container mx-auto max-w-4xl"
+        className="relative container mx-auto max-w-4xl p-4"
       >
         {sessionId && (
-          <Card className="mb-4 bg-card">
+          <Card className="mb-4">
             <CardContent className="p-4">
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
@@ -755,9 +757,9 @@ export default function TablePage() {
             </CardContent>
           </Card>
         )}
-        <Card className="shadow-lg border-0 bg-card">
+        <Card className="shadow-lg">
           <CardHeader className="pb-4">
-            <CardTitle className="text-2xl font-bold text-center text-foreground">
+            <CardTitle className="text-2xl font-bold text-center">
               How can we help you?
             </CardTitle>
           </CardHeader>
@@ -773,7 +775,7 @@ export default function TablePage() {
                   <AlertDialogTrigger asChild>
                     <Button
                       size="lg"
-                      className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                      className="h-28 w-full flex flex-col items-center justify-center space-y-3 bg-primary hover:bg-primary/90"
                       disabled={hasActiveRequest("waiter")}
                       title={
                         hasActiveRequest("waiter")
@@ -785,7 +787,7 @@ export default function TablePage() {
                       <span className="font-medium">Call Waiter</span>
                     </Button>
                   </AlertDialogTrigger>
-                  <AlertDialogContent>
+                  <AlertDialogContent className="bg-white dark:bg-slate-900">
                     <AlertDialogHeader>
                       <AlertDialogTitle>Call Waiter</AlertDialogTitle>
                       <AlertDialogDescription>
@@ -813,7 +815,7 @@ export default function TablePage() {
                 >
                   <Button
                     size="lg"
-                    className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                    className="h-28 w-full flex flex-col items-center justify-center space-y-3 bg-blue-500 hover:bg-blue-600"
                     onClick={() => setIsWaterDialogOpen(true)}
                     disabled={hasActiveRequest("water")}
                     title={
@@ -882,7 +884,7 @@ export default function TablePage() {
                   <AlertDialogTrigger asChild>
                     <Button
                       size="lg"
-                      className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                      className="h-28 w-full flex flex-col items-center justify-center space-y-3 bg-green-500 hover:bg-green-600"
                       disabled={hasActiveRequest("check")}
                       title={
                         hasActiveRequest("check")
@@ -894,7 +896,7 @@ export default function TablePage() {
                       <span className="font-medium">Get Check</span>
                     </Button>
                   </AlertDialogTrigger>
-                  <AlertDialogContent>
+                  <AlertDialogContent className="bg-white dark:bg-slate-900">
                     <AlertDialogHeader>
                       <AlertDialogTitle>Request Check</AlertDialogTitle>
                       <AlertDialogDescription>
@@ -918,13 +920,13 @@ export default function TablePage() {
                   <DialogTrigger asChild>
                     <Button
                       size="lg"
-                      className="h-28 w-full flex flex-col items-center justify-center space-y-3"
+                      className="h-28 w-full flex flex-col items-center justify-center space-y-3 bg-gray-500 hover:bg-gray-600"
                     >
                       <Plus className="h-8 w-8" />
                       <span className="font-medium">Other Request</span>
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="bg-white dark:bg-slate-900">
                     <DialogHeader>
                       <DialogTitle>Other Request</DialogTitle>
                     </DialogHeader>
@@ -952,10 +954,10 @@ export default function TablePage() {
             </div>
 
             {requests.length > 0 && (
-              <Tabs defaultValue="active" className="w-full">
+              <Tabs defaultValue="active" className="w-full mt-8">
                 <TabsList className="w-full">
                   <TabsTrigger value="active" className="flex-1">
-                    ActiveRequests
+                    Active Requests
                   </TabsTrigger>
                   <TabsTrigger value="completed" className="flex-1">
                     Completed
@@ -984,7 +986,7 @@ export default function TablePage() {
                     End Session
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent>
+                <AlertDialogContent className="bg-white dark:bg-slate-900">
                   <AlertDialogHeader>
                     <AlertDialogTitle>End Session</AlertDialogTitle>
                     <AlertDialogDescription>
@@ -1005,6 +1007,7 @@ export default function TablePage() {
             {feedbackRequest && (
               <FeedbackDialog
                 request={feedbackRequest}
+                open={true}
                 onClose={() => setFeedbackRequest(null)}
               />
             )}
