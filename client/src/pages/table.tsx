@@ -956,7 +956,9 @@ export default function TablePage() {
                   <DialogFooter className="p-6 pt-0">
                     <Button onClick={handleOtherRequest} className="w-full">
                       Send Request
-                    </Button>                  </DialogFooter                </DialogContent>
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
               </Dialog>
             </div>
 
