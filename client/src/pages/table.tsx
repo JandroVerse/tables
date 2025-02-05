@@ -211,7 +211,9 @@ export default function TablePage() {
         if (data.shouldClearSession) {
           // Session is explicitly ended or expired
           localStorage.removeItem(`table_session_${tableId}`);
+          setSessionId(null); // Clear session ID to stop further validation
           setLocation('/session-ended');
+          return false; // Return false to indicate session is invalid
         } else if (data.activeSession) {
           if (data.activeSession.id !== sessionId) {
             // Different active session exists
@@ -222,24 +224,35 @@ export default function TablePage() {
           // No active session exists, and we don't have a session
           return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
         }
+        return true; // Session is still valid
       } catch (error) {
         console.error('Error validating session:', error);
         toast({
           title: "Error",
-          description: "Your session has expired. Please refresh the page to start a new session.",
+          description: "Your session has expired. Please scan the QR code again to start a new session.",
           variant: "destructive",
-        })
+        });
+        return false; // Return false to indicate session is invalid
       }
     };
 
     // Initial validation
     validateSession();
 
-    // Set up periodic validation
-    const interval = setInterval(validateSession, 10000); // Check every 10 seconds
+    // Set up periodic validation only if we have a valid session
+    const interval = setInterval(async () => {
+      const isValid = await validateSession();
+      if (!isValid) {
+        // If session becomes invalid, clear the interval
+        clearInterval(interval);
+      }
+    }, 10000); // Check every 10 seconds
 
-    return () => clearInterval(interval);
-  }, [restaurantId, tableId, sessionId, setLocation]);
+    // Cleanup function
+    return () => {
+      clearInterval(interval);
+    };
+  }, [restaurantId, tableId, sessionId, setLocation, toast]);
 
   // Update the useEffect for WebSocket handling
   useEffect(() => {
@@ -262,6 +275,7 @@ export default function TablePage() {
             setSessionId(null);
             setIsSessionEnded(true);
             setLocation('/session-ended');
+            wsService.disconnect(); // Disconnect WebSocket when session ends
           }
           break;
       }
@@ -404,6 +418,7 @@ export default function TablePage() {
     }
   };
 
+  // Update the session end mutation
   const { mutate: endSession } = useMutation({
     mutationFn: async () => {
       if (!sessionId) throw new Error("No active session");
@@ -416,6 +431,7 @@ export default function TablePage() {
     },
     onSuccess: () => {
       localStorage.removeItem(`table_session_${tableId}`);
+      setSessionId(null); // Clear session ID immediately
       toast({
         title: "Session Ended",
         description: "Table session has been closed successfully.",
@@ -437,6 +453,7 @@ export default function TablePage() {
       // First clear all table session data
       const currentKey = `table_session_${tableId}`;
       localStorage.removeItem(currentKey);
+      setSessionId(null); // Ensure session ID is cleared
 
       // Then redirect to session-ended
       setLocation('/session-ended');
