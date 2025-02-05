@@ -24,7 +24,7 @@ import {
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import { GlassWater, Bell, Receipt, MessageSquare, Trash2, Grid } from "lucide-react";
+import { GlassWater, Bell, Receipt, MessageSquare, Trash2, Grid, WebhookIcon } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Table, Request } from "@db/schema";
@@ -46,6 +46,13 @@ interface TableWithPosition extends Table {
   position: TablePosition;
 }
 
+interface TableSession {
+  id: number;
+  tableId: number;
+  startedAt: string;
+  endedAt: string | null;
+}
+
 interface DraggableTableProps {
   table: TableWithPosition;
   onDragStop: (tableId: number, position: { x: number; y: number }) => void;
@@ -55,6 +62,7 @@ interface DraggableTableProps {
   onClick: () => void;
   activeRequests: Request[];
   editMode: boolean;
+  hasActiveSession: boolean;
 }
 
 const RequestIndicator = ({ type }: { type: string }) => {
@@ -96,6 +104,7 @@ const DraggableTable = ({
   onClick,
   activeRequests,
   editMode,
+  hasActiveSession,
 }: DraggableTableProps) => {
   const [size, setSize] = useState({
     width: table.position.width || 100,
@@ -107,28 +116,28 @@ const DraggableTable = ({
   });
   const [resizing, setResizing] = useState(false);
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
-    const [hasLongWaitingRequest, setHasLongWaitingRequest] = useState(false);
+  const [hasLongWaitingRequest, setHasLongWaitingRequest] = useState(false);
 
-    useEffect(() => {
-        const checkLongWaitingRequests = () => {
-          const now = new Date().getTime();
-          const longWaitingRequest = activeRequests.some(request => {
-            if (request.status === "pending") {
-              const requestTime = new Date(request.createdAt).getTime();
-              const waitTime = now - requestTime;
-              return waitTime > 5 * 60 * 1000;
-            }
-            return false;
-          });
-          setHasLongWaitingRequest(longWaitingRequest);
-        };
+  useEffect(() => {
+    const checkLongWaitingRequests = () => {
+      const now = new Date().getTime();
+      const longWaitingRequest = activeRequests.some(request => {
+        if (request.status === "pending") {
+          const requestTime = new Date(request.createdAt).getTime();
+          const waitTime = now - requestTime;
+          return waitTime > 5 * 60 * 1000;
+        }
+        return false;
+      });
+      setHasLongWaitingRequest(longWaitingRequest);
+    };
 
-        checkLongWaitingRequests();
+    checkLongWaitingRequests();
 
-        const interval = setInterval(checkLongWaitingRequests, 30000);
+    const interval = setInterval(checkLongWaitingRequests, 30000);
 
-        return () => clearInterval(interval);
-      }, [activeRequests]);
+    return () => clearInterval(interval);
+  }, [activeRequests]);
 
   const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     if (!editMode) return;
@@ -224,12 +233,23 @@ const DraggableTable = ({
           onClick();
         }}
       >
-        {/* Table content */}
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-medium text-gray-800">{table.name}</span>
         </div>
 
-        {/* Resize handles with improved visual feedback */}
+        {hasActiveSession && (
+          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="bg-blue-500 rounded-full p-1.5 shadow-lg"
+              title="Active session"
+            >
+              <WebhookIcon className="h-3 w-3 text-white" />
+            </motion.div>
+          </div>
+        )}
+
         {editMode && (
           <>
             {['top', 'right', 'bottom', 'left', 'topright', 'bottomright', 'bottomleft', 'topleft'].map((direction) => {
@@ -276,7 +296,6 @@ const DraggableTable = ({
           </>
         )}
 
-        {/* Delete button - moved to bottom */}
         {editMode && (
           <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 z-10">
             <AlertDialog>
@@ -307,7 +326,6 @@ const DraggableTable = ({
           </div>
         )}
 
-        {/* Request indicators */}
         <div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
           <div className="flex gap-2">
             <AnimatePresence>
@@ -362,7 +380,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   const [selectedShape, setSelectedShape] = useState<"square" | "round">("square");
   const [showRequestPreview, setShowRequestPreview] = useState(false);
   const [editMode, setEditMode] = useState(false);
-    const [showGrid, setShowGrid] = useState(false);
+  const [showGrid, setShowGrid] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
@@ -371,6 +389,10 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests"],
+  });
+
+  const { data: tableSessions = [] } = useQuery<TableSession[]>({
+    queryKey: [`/api/restaurants/${restaurantId}/table-sessions`],
   });
 
   const { mutate: updateTablePosition } = useMutation({
@@ -470,6 +492,13 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
     );
   };
 
+  const getTableActiveSession = (tableId: number) => {
+    return tableSessions.some(
+      session => session.tableId === tableId && !session.endedAt
+    );
+  };
+
+
   const handleTableClick = (tableId: number) => {
     setSelectedTable(tableId);
     if (!editMode) {
@@ -514,15 +543,15 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
               Edit Mode
             </Label>
           </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-              onClick={() => setShowGrid(!showGrid)}
-            >
-              <Grid className="h-4 w-4" />
-              {showGrid ? "Hide Grid" : "Show Grid"}
-            </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            onClick={() => setShowGrid(!showGrid)}
+          >
+            <Grid className="h-4 w-4" />
+            {showGrid ? "Hide Grid" : "Show Grid"}
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -556,7 +585,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
               className="relative h-[600px] border rounded-lg bg-gray-50"
               onClick={() => setSelectedTable(null)}
             >
-                {showGrid && <GridBackground />}
+              {showGrid && <GridBackground />}
               {tables.map((table) => (
                 <DraggableTable
                   key={table.id}
@@ -568,6 +597,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
                   onClick={() => handleTableClick(table.id)}
                   activeRequests={getActiveRequests(table.id)}
                   editMode={editMode}
+                  hasActiveSession={getTableActiveSession(table.id)}
                 />
               ))}
             </div>

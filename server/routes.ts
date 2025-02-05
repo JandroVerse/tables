@@ -755,5 +755,30 @@ export function registerRoutes(app: Express): Server {
         }
     });
 
+    // Get table sessions for a restaurant
+    app.get("/api/restaurants/:restaurantId/table-sessions", ensureAuthenticated, async (req: Request, res: Response) => {
+        const { restaurantId } = req.params;
+
+        try {
+            // Get all table sessions for the restaurant's tables
+            const sessions = await db.query.tableSessions.findMany({
+                where: isNull(tableSessions.endedAt),
+                with: {
+                    table: true,
+                },
+            });
+
+            // Filter sessions to only include those for tables in this restaurant
+            const restaurantSessions = sessions.filter(
+                session => session.table.restaurantId === Number(restaurantId)
+            );
+
+            res.json(restaurantSessions);
+        } catch (error) {
+            console.error('Error fetching table sessions:', error);
+            res.status(500).json({ message: "Failed to fetch table sessions" });
+        }
+    });
+
     return httpServer;
 }
