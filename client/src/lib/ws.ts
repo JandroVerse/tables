@@ -1,3 +1,5 @@
+import { useToast } from "@/hooks/use-toast";
+
 type ServiceRequestListener = (data: any) => void;
 
 class WebSocketService {
@@ -27,15 +29,17 @@ class WebSocketService {
         this.isAuthenticated = true;
       } catch (e) {
         console.error('Error parsing session data:', e);
+        // If there's an error parsing the session, remove it
+        if (tableId) {
+          localStorage.removeItem(`table_session_${tableId}`);
+        }
       }
     }
 
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      if (this.reconnectAttempts === 0) {
-        console.log('WebSocket connected');
-      }
+      console.log('WebSocket connected');
       this.reconnectAttempts = 0;
       this.startPingInterval();
     };
@@ -46,6 +50,17 @@ class WebSocketService {
         if (data.type !== 'ping') {
           console.log('WebSocket message received:', data);
         }
+
+        // Handle session end message immediately
+        if (data.type === 'end_session') {
+          const currentTableId = window.location.pathname.match(/\/request\/\d+\/(\d+)/)?.[1];
+          if (currentTableId && data.tableId === Number(currentTableId)) {
+            localStorage.removeItem(`table_session_${currentTableId}`);
+            window.location.href = '/session-ended';
+            return;
+          }
+        }
+
         this.listeners.forEach(listener => listener(data));
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -53,21 +68,24 @@ class WebSocketService {
     };
 
     this.ws.onclose = () => {
-      if (this.reconnectAttempts === 0) {
-        console.log('WebSocket connection closed');
-      }
+      console.log('WebSocket connection closed');
       this.cleanup();
 
-      // Only attempt reconnection if authenticated or on a table page
-      if ((this.isAuthenticated || window.location.pathname.includes('/request/')) && 
-          this.reconnectAttempts < this.maxReconnectAttempts) {
+      const currentTableId = window.location.pathname.match(/\/request\/\d+\/(\d+)/)?.[1];
+      const currentSessionData = currentTableId ? localStorage.getItem(`table_session_${currentTableId}`) : null;
+
+      // Only attempt reconnection if we have a valid session or are authenticated
+      if ((currentSessionData || this.isAuthenticated) && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
-        if (this.reconnectAttempts === 1) {
-          console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-        }
+        console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);
       } else if (this.reconnectAttempts === this.maxReconnectAttempts) {
         console.error('Maximum reconnection attempts reached');
+        // Clear session on max reconnect attempts
+        if (currentTableId) {
+          localStorage.removeItem(`table_session_${currentTableId}`);
+          window.location.href = '/session-ended';
+        }
       }
     };
 

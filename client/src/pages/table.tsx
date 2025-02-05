@@ -152,6 +152,10 @@ export default function TablePage() {
                   JSON.stringify(sessionData)
                 );
               }
+            } else if (data.shouldClearSession) {
+              // Clear session and redirect if server indicates session is invalid
+              localStorage.removeItem(`table_session_${tableId}`);
+              setLocation('/session-ended');
             } else if (data.requiresNewSession && !sessionId) {
               return apiRequest("POST", `/api/restaurants/${restaurantId}/tables/${tableId}/sessions`);
             }
@@ -323,6 +327,16 @@ export default function TablePage() {
         notes,
         sessionId,
       });
+
+      if (response.status === 403) {
+        const data = await response.json();
+        if (data.shouldClearSession) {
+          localStorage.removeItem(`table_session_${tableId}`);
+          setLocation('/session-ended');
+        }
+        throw new Error(data.message);
+      }
+
       return response.json();
     },
     onSuccess: () => {
@@ -337,7 +351,7 @@ export default function TablePage() {
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to send request. Please try again.",
+        description: error.message,
         variant: "destructive",
       });
       console.error("Failed to create request:", error);

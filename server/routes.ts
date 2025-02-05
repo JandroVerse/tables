@@ -283,10 +283,15 @@ export function registerRoutes(app: Express): Server {
                     eq(tableSessions.sessionId, sessionId),
                     isNull(tableSessions.endedAt)
                 ),
+                orderBy: (sessions, { desc }) => [desc(sessions.startedAt)],
             });
 
             if (!session) {
-                return res.status(403).json({ message: "Invalid or expired session" });
+                // Clear client session if it's invalid
+                return res.status(403).json({
+                    message: "Invalid or expired session",
+                    shouldClearSession: true
+                });
             }
 
             // Check session expiry
@@ -298,7 +303,23 @@ export function registerRoutes(app: Express): Server {
                 await db.update(tableSessions)
                     .set({ endedAt: new Date() })
                     .where(eq(tableSessions.id, session.id));
-                return res.status(403).json({ message: "Session expired" });
+
+                // Notify all clients about the expired session
+                wss.clients.forEach((client) => {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({
+                            type: "end_session",
+                            tableId: session.tableId,
+                            sessionId: session.sessionId,
+                            reason: "expired"
+                        }));
+                    }
+                });
+
+                return res.status(403).json({
+                    message: "Session expired",
+                    shouldClearSession: true
+                });
             }
 
             // Store session data in req.session
@@ -482,7 +503,6 @@ export function registerRoutes(app: Express): Server {
             res.status(500).json({ message: "Failed to create session" });
         }
     });
-
 
 
     app.post("/api/restaurants/:restaurantId/tables/:tableId/sessions/end", async (req: Request, res: Response) => {
