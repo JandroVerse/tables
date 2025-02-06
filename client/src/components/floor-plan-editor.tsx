@@ -514,49 +514,49 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Floor Plan Editor</CardTitle>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="edit-mode"
-              checked={editMode}
-              onCheckedChange={(checked) => {
-                setEditMode(checked as boolean);
-                if (!checked && tables.length > 0) {
-                  tables.forEach(table => {
-                    const tableElement = document.querySelector(`[data-table-id="${table.id}"]`);
-                    if (tableElement) {
-                      const rect = tableElement.getBoundingClientRect();
-                      updateTablePosition({
-                        id: table.id,
-                        position: {
-                          ...table.position,
-                          x: snapToGrid(parseFloat(tableElement.style.transform.split('translate(')[1])),
-                          y: snapToGrid(parseFloat(tableElement.style.transform.split(', ')[1])),
-                          width: snapToGrid(rect.width),
-                          height: snapToGrid(rect.height)
+            <CardTitle>Restaurant Floor</CardTitle>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="edit-mode"
+                  checked={editMode}
+                  onCheckedChange={(checked) => {
+                    setEditMode(checked as boolean);
+                    if (!checked && tables.length > 0) {
+                      tables.forEach(table => {
+                        const tableElement = document.querySelector(`[data-table-id="${table.id}"]`);
+                        if (tableElement) {
+                          const rect = tableElement.getBoundingClientRect();
+                          updateTablePosition({
+                            id: table.id,
+                            position: {
+                              ...table.position,
+                              x: snapToGrid(parseFloat(tableElement.style.transform.split('translate(')[1])),
+                              y: snapToGrid(parseFloat(tableElement.style.transform.split(', ')[1])),
+                              width: snapToGrid(rect.width),
+                              height: snapToGrid(rect.height)
+                            }
+                          });
                         }
                       });
                     }
-                  });
-                }
-              }}
-            />
-            <Label htmlFor="edit-mode" className="font-medium text-sm">
-              Edit Mode
-            </Label>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2"
-            onClick={() => setShowGrid(!showGrid)}
-          >
-            <Grid className="h-4 w-4" />
-            {showGrid ? "Hide Grid" : "Show Grid"}
-          </Button>
-        </div>
-      </CardHeader>
+                  }}
+                />
+                <Label htmlFor="edit-mode" className="font-medium text-sm">
+                  Edit Mode
+                </Label>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+                onClick={() => setShowGrid(!showGrid)}
+              >
+                <Grid className="h-4 w-4" />
+                {showGrid ? "Hide Grid" : "Show Grid"}
+              </Button>
+            </div>
+          </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {editMode && (
