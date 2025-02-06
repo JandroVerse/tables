@@ -621,6 +621,7 @@ export default function TablePage() {
               >
                 <CardContent className="p-4">
                   <div className="font-medium text-primary relative">
+                    {request.table?.name} - {/* Add table name here */}
                     {request.type === "water" ? "Water Refill" :
                       request.type === "waiter" ? "Call Waiter" :
                         request.type === "check" ? "Get Check" :
@@ -628,11 +629,6 @@ export default function TablePage() {
                     {count > 1 && (
                       <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
                         {count}
-                      </span>
-                    )}
-                    {request.table && (
-                      <span className="ml-2 text-sm text-muted-foreground">
-                        {request.table.name}
                       </span>
                     )}
                   </div>
@@ -966,7 +962,7 @@ export default function TablePage() {
           </CardContent>
         </Card>
 
-        {/* End Session button moved to bottom */}
+        {/*{/* End Session button moved to bottom */}
         {isSessionCreator && (
           <div className="mt-6">
             <AlertDialog>
