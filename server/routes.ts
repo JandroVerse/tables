@@ -128,6 +128,39 @@ export function registerRoutes(app: Express): Server {
         res.json(restaurant);
     });
 
+    // Add the restaurant update endpoint
+    app.patch("/api/restaurant", ensureAuthenticated, async (req: Request, res: Response) => {
+        const { name } = req.body;
+
+        if (!name || typeof name !== 'string') {
+            return res.status(400).json({ message: "Invalid restaurant name" });
+        }
+
+        try {
+            // Get the user's first restaurant (current implementation supports one restaurant per user)
+            const [restaurant] = await db.query.restaurants.findMany({
+                where: eq(restaurants.ownerId, req.user!.id),
+                limit: 1
+            });
+
+            if (!restaurant) {
+                return res.status(404).json({ message: "Restaurant not found" });
+            }
+
+            // Update the restaurant name
+            const [updatedRestaurant] = await db
+                .update(restaurants)
+                .set({ name })
+                .where(eq(restaurants.id, restaurant.id))
+                .returning();
+
+            res.json(updatedRestaurant);
+        } catch (error) {
+            console.error('Error updating restaurant:', error);
+            res.status(500).json({ message: "Failed to update restaurant" });
+        }
+    });
+
     // Table routes - all within restaurant context
     app.get("/api/restaurants/:restaurantId/tables", ensureAuthenticated, async (req: Request, res: Response) => {
         const { restaurantId } = req.params;
