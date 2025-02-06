@@ -2,13 +2,17 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
-import { tables, requests, feedback, tableSessions, restaurants } from "@db/schema";
+import { tables, requests, feedback, tableSessions, restaurants, users } from "@db/schema";
 import { eq, and, isNull, or } from "drizzle-orm";
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
 import { customAlphabet } from 'nanoid';
 import { setupAuth } from "./auth";
 import { IncomingMessage } from 'http';
+import { scrypt, randomBytes, timingSafeEqual } from 'crypto';
+import { promisify } from 'util';
+
+const scryptAsync = promisify(scrypt);
 
 // Update the ensureAuthenticated middleware to properly handle table-related routes
 function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
@@ -91,6 +95,52 @@ export function registerRoutes(app: Express): Server {
 
     // Setup authentication
     setupAuth(app);
+
+    // Add password change endpoint
+    app.post("/api/user/change-password", ensureAuthenticated, async (req: Request, res: Response) => {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ message: "Current password and new password are required" });
+        }
+
+        try {
+            const [user] = await db.query.users.findMany({
+                where: eq(users.id, req.user!.id),
+                columns: {
+                    password: true
+                }
+            });
+
+            if (!user) {
+                return res.status(404).json({ message: "User not found" });
+            }
+
+            // Verify current password
+            const [hashedCurrent, salt] = user.password.split('.');
+            const hashedBuf = Buffer.from(hashedCurrent, 'hex');
+            const suppliedBuf = (await scryptAsync(currentPassword, salt, 64)) as Buffer;
+
+            if (!timingSafeEqual(hashedBuf, suppliedBuf)) {
+                return res.status(400).json({ message: "Current password is incorrect" });
+            }
+
+            // Hash new password
+            const newSalt = randomBytes(16).toString('hex');
+            const newBuf = (await scryptAsync(newPassword, newSalt, 64)) as Buffer;
+            const newHashedPassword = `${newBuf.toString('hex')}.${newSalt}`;
+
+            // Update password
+            await db.update(users)
+                .set({ password: newHashedPassword })
+                .where(eq(users.id, req.user!.id));
+
+            res.json({ message: "Password updated successfully" });
+        } catch (error) {
+            console.error('Error updating password:', error);
+            res.status(500).json({ message: "Failed to update password" });
+        }
+    });
 
     // Restaurant routes
     app.post("/api/restaurants", ensureAuthenticated, async (req: Request, res: Response) => {
