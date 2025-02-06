@@ -303,7 +303,7 @@ export default function TablePage() {
     queryKey: ["/api/requests", tableId],
     queryFn: async () => {
       if (!sessionId) return [];
-      const res = await fetch(`/api/requests?tableId=${tableId}&sessionId=${sessionId}&include=table`);
+      const res = await fetch(`/api/requests?tableId=${tableId}&sessionId=${sessionId}`);
       if (!res.ok) throw new Error("Failed to fetch requests");
       return res.json();
     },
@@ -622,10 +622,10 @@ export default function TablePage() {
               >
                 <CardContent className="p-4">
                   <div className="font-medium text-primary relative">
-                    {request.type === "water" ? `${request.table?.name || 'Table ' + request.tableId} - Water Refill` :
-                      request.type === "waiter" ? `${request.table?.name || 'Table ' + request.tableId} - Call Waiter` :
-                        request.type === "check" ? `${request.table?.name || 'Table ' + request.tableId} - Get Check` :
-                          `${request.table?.name || 'Table ' + request.tableId} - ${request.type}`}
+                    {request.type === "water" ? `${request.table?.name} - Water Refill` :
+                      request.type === "waiter" ? `${request.table?.name} - Call Waiter` :
+                        request.type === "check" ? `${request.table?.name} - Get Check` :
+                          `${request.table?.name} - ${request.type}`}
                     {count > 1 && (
                       <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
                         {count}
@@ -1017,5 +1017,5 @@ export default function TablePage() {
 }
 
 interface RequestWithTable extends Request {
-  table: Table | null;
+  table?: Table;
 }
