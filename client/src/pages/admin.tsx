@@ -27,7 +27,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import type { Request, Table as RestaurantTable, Restaurant } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LogOut } from "lucide-react";
@@ -47,6 +47,14 @@ export default function AdminPage() {
   const queryClient = useQueryClient();
   const form = useForm<CreateRestaurantForm>();
   const { user } = useAuth();
+  const [, navigate] = useLocation();
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!user) {
+      navigate('/auth');
+    }
+  }, [user, navigate]);
 
   // First query to get restaurants
   const { data: restaurants = [] } = useQuery<Restaurant[]>({
@@ -67,6 +75,8 @@ export default function AdminPage() {
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", currentRestaurant?.id],
     enabled: !!currentRestaurant?.id && !!user,
+    refetchInterval: 5000, // Refetch every 5 seconds
+    staleTime: 1000, // Consider data stale after 1 second
   });
 
   // Handle WebSocket updates
@@ -76,41 +86,47 @@ export default function AdminPage() {
     console.log('[Admin] Received WebSocket message:', data);
 
     if (data.type === "new_request") {
-      // Immediately invalidate the requests query to fetch fresh data
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
-
       // Optimistically update the cache
       queryClient.setQueryData(["/api/requests", currentRestaurant.id], (oldData: Request[] = []) => {
         const newRequest = data.request;
         // Check if request belongs to this restaurant
         const table = tables.find(t => t.id === newRequest.tableId);
         if (table && table.restaurantId === currentRestaurant.id) {
-          // Keep the list sorted by creation date
           const updatedRequests = [newRequest, ...oldData];
-          return updatedRequests.sort((a, b) => 
+          return updatedRequests.sort((a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           );
         }
         return oldData;
       });
 
-      // Show toast notification for new request
+      // Also invalidate to ensure we get the latest state
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
+
       toast({
         title: "New Request",
         description: `New ${data.request.type} request from Table ${tables.find(t => t.id === data.request.tableId)?.name}`,
       });
     } else if (data.type === "update_request") {
-      // Immediately invalidate the requests query
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
-
       // Optimistically update the cache
       queryClient.setQueryData(["/api/requests", currentRestaurant.id], (oldData: Request[] = []) => {
-        return oldData.map(request =>
+        const updatedList = oldData.map(request =>
           request.id === data.request.id ? data.request : request
-        ).sort((a, b) => 
+        );
+        return updatedList.sort((a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
       });
+
+      // Also invalidate to ensure we get the latest state
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
+
+      if (data.request.status === "completed") {
+        toast({
+          title: "Request Completed",
+          description: `Request from Table ${tables.find(t => t.id === data.request.tableId)?.name} has been completed.`,
+        });
+      }
     }
   }, [currentRestaurant?.id, queryClient, tables, user, toast]);
 
@@ -195,7 +211,7 @@ export default function AdminPage() {
     // Only include requests for this restaurant's tables
     const tableRequests = requests.filter(r =>
       r.tableId === table.id &&
-      (r.status === "pending" || r.status === "in_progress")
+      (r.status === "pending" || r.status === "in_progress" || r.status === "completed") // Include completed requests
     );
 
     if (tableRequests.length > 0) {
@@ -295,11 +311,11 @@ export default function AdminPage() {
                                 onClick={() =>
                                   updateRequest({
                                     id: request.id,
-                                    status: request.status === "pending" ? "in_progress" : "completed",
+                                    status: request.status === "pending" ? "in_progress" : request.status === "in_progress" ? "completed" : "pending",
                                   })
                                 }
                               >
-                                {request.status === "pending" ? "Start" : "Complete"}
+                                {request.status === "pending" ? "Start" : request.status === "in_progress" ? "Complete" : "Restart"}
                               </Button>
                             </TableCell>
                           </TableRow>

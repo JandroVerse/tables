@@ -77,7 +77,21 @@ class WebSocketService {
   private processPendingMessages() {
     while (this.pendingMessages.length > 0) {
       const message = this.pendingMessages.shift();
-      this.send(message);
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        try {
+          console.log('[WS] Processing pending message:', message);
+          this.ws.send(JSON.stringify(message));
+        } catch (error) {
+          console.error('[WS] Error sending pending message:', error);
+          // Put the message back in the queue
+          this.pendingMessages.unshift(message);
+          break;
+        }
+      } else {
+        // Put the message back in the queue
+        this.pendingMessages.unshift(message);
+        break;
+      }
     }
   }
 
