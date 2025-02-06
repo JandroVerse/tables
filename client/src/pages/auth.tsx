@@ -13,10 +13,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 const registerSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string().min(1, "Please confirm your password"),
   email: z.string().email("Invalid email"),
   restaurantName: z.string().min(1, "Restaurant name is required"),
   restaurantAddress: z.string().optional(),
   restaurantPhone: z.string().optional(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 });
 
 type AuthForm = z.infer<typeof registerSchema>;
@@ -32,6 +36,7 @@ export default function AuthPage() {
     defaultValues: {
       username: "",
       password: "",
+      confirmPassword: "",
       email: "",
       restaurantName: "",
       restaurantAddress: "",
@@ -54,15 +59,17 @@ export default function AuthPage() {
           password: data.password
         });
       } else {
+        // Remove confirmPassword before sending to API
+        const { confirmPassword, ...registerData } = data;
         await registerMutation.mutateAsync({
-          username: data.username,
-          password: data.password,
-          email: data.email,
+          username: registerData.username,
+          password: registerData.password,
+          email: registerData.email,
           role: "owner",
           restaurantDetails: {
-            name: data.restaurantName,
-            address: data.restaurantAddress || null,
-            phone: data.restaurantPhone || null,
+            name: registerData.restaurantName,
+            address: registerData.restaurantAddress || null,
+            phone: registerData.restaurantPhone || null,
           }
         });
       }
@@ -176,6 +183,21 @@ export default function AuthPage() {
                     </FormItem>
                   )}
                 />
+                {!isLogin && (
+                  <FormField
+                    control={form.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-foreground">Confirm Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" placeholder="Confirm your password" {...field} />
+                        </FormControl>
+                        <FormMessage className="text-sm text-red-500" />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <Button 
                   type="submit" 
                   className="w-full"
