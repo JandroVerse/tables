@@ -15,6 +15,7 @@ export const restaurants = pgTable("restaurants", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   ownerId: integer("owner_id").references(() => users.id).notNull(),
+  email: text("email"),
   address: text("address"),
   phone: text("phone"),
   active: boolean("active").default(true).notNull(),

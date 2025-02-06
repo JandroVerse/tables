@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { User, Settings } from "lucide-react";
+import { User, Settings, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,6 +33,16 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -43,13 +53,24 @@ const passwordSchema = z.object({
   path: ["confirmPassword"]
 });
 
-const restaurantNameSchema = z.object({
+const restaurantSchema = z.object({
   name: z.string().min(1, "Restaurant name is required"),
+  email: z.string().email("Invalid email").optional().nullable(),
+  address: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
 });
 
-export function ProfileMenu({ restaurantName }: { restaurantName: string }) {
+export function ProfileMenu({ restaurantName, restaurantDetails }: { 
+  restaurantName: string;
+  restaurantDetails?: {
+    email?: string | null;
+    address?: string | null;
+    phone?: string | null;
+  }
+}) {
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
-  const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
+  const [isRestaurantDialogOpen, setIsRestaurantDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -62,10 +83,13 @@ export function ProfileMenu({ restaurantName }: { restaurantName: string }) {
     },
   });
 
-  const nameForm = useForm<z.infer<typeof restaurantNameSchema>>({
-    resolver: zodResolver(restaurantNameSchema),
+  const restaurantForm = useForm<z.infer<typeof restaurantSchema>>({
+    resolver: zodResolver(restaurantSchema),
     defaultValues: {
       name: restaurantName,
+      email: restaurantDetails?.email || "",
+      address: restaurantDetails?.address || "",
+      phone: restaurantDetails?.phone || "",
     },
   });
 
@@ -95,23 +119,49 @@ export function ProfileMenu({ restaurantName }: { restaurantName: string }) {
     },
   });
 
-  const updateRestaurantNameMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof restaurantNameSchema>) => {
+  const updateRestaurantMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof restaurantSchema>) => {
       const res = await apiRequest("PATCH", "/api/restaurant", data);
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(text || "Failed to update restaurant name");
+        throw new Error(text || "Failed to update restaurant details");
       }
       return res.json();
     },
     onSuccess: (data) => {
-      setIsNameDialogOpen(false);
+      setIsRestaurantDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/restaurants"] });
       toast({
         title: "Success",
-        description: "Restaurant name updated successfully",
+        description: "Restaurant details updated successfully",
       });
-      nameForm.reset({ name: data.name });
+      restaurantForm.reset(data);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/user");
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to delete account");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Account Deleted",
+        description: "Your account has been successfully deleted.",
+      });
+      // Redirect to auth page
+      window.location.href = "/auth";
     },
     onError: (error: Error) => {
       toast({
@@ -142,13 +192,20 @@ export function ProfileMenu({ restaurantName }: { restaurantName: string }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setIsNameDialogOpen(true)}>
+          <DropdownMenuItem onClick={() => setIsRestaurantDialogOpen(true)}>
             <Settings className="mr-2 h-4 w-4" />
             <span>Account</span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setIsPasswordDialogOpen(true)}>
             <User className="mr-2 h-4 w-4" />
-            <span>Profile</span>
+            <span>Password</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => setIsDeleteDialogOpen(true)}
+            className="text-red-600"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            <span>Delete Account</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -212,18 +269,18 @@ export function ProfileMenu({ restaurantName }: { restaurantName: string }) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isNameDialogOpen} onOpenChange={setIsNameDialogOpen}>
+      <Dialog open={isRestaurantDialogOpen} onOpenChange={setIsRestaurantDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Change Restaurant Name</DialogTitle>
+            <DialogTitle>Restaurant Details</DialogTitle>
             <DialogDescription>
-              Enter a new name for your restaurant.
+              Update your restaurant information.
             </DialogDescription>
           </DialogHeader>
-          <Form {...nameForm}>
-            <form onSubmit={nameForm.handleSubmit(data => updateRestaurantNameMutation.mutate(data))} className="space-y-4">
+          <Form {...restaurantForm}>
+            <form onSubmit={restaurantForm.handleSubmit(data => updateRestaurantMutation.mutate(data))} className="space-y-4">
               <FormField
-                control={nameForm.control}
+                control={restaurantForm.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
@@ -235,15 +292,77 @@ export function ProfileMenu({ restaurantName }: { restaurantName: string }) {
                   </FormItem>
                 )}
               />
+              <FormField
+                control={restaurantForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="email" {...field} value={field.value || ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={restaurantForm.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address (Optional)</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={restaurantForm.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number (Optional)</FormLabel>
+                    <FormControl>
+                      <Input {...field} value={field.value || ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <DialogFooter>
-                <Button type="submit" disabled={updateRestaurantNameMutation.isPending}>
-                  {updateRestaurantNameMutation.isPending ? "Updating..." : "Update Name"}
+                <Button type="submit" disabled={updateRestaurantMutation.isPending}>
+                  {updateRestaurantMutation.isPending ? "Updating..." : "Update Details"}
                 </Button>
               </DialogFooter>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your account
+              and remove all your data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await deleteAccountMutation.mutate();
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteAccountMutation.isPending ? "Deleting..." : "Delete Account"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

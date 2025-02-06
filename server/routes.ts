@@ -180,7 +180,7 @@ export function registerRoutes(app: Express): Server {
 
     // Add the restaurant update endpoint
     app.patch("/api/restaurant", ensureAuthenticated, async (req: Request, res: Response) => {
-        const { name } = req.body;
+        const { name, email, address, phone } = req.body;
 
         if (!name || typeof name !== 'string') {
             return res.status(400).json({ message: "Invalid restaurant name" });
@@ -197,10 +197,15 @@ export function registerRoutes(app: Express): Server {
                 return res.status(404).json({ message: "Restaurant not found" });
             }
 
-            // Update the restaurant name
+            // Update the restaurant details
             const [updatedRestaurant] = await db
                 .update(restaurants)
-                .set({ name })
+                .set({
+                    name,
+                    email: email || null,
+                    address: address || null,
+                    phone: phone || null
+                })
                 .where(eq(restaurants.id, restaurant.id))
                 .returning();
 
@@ -208,6 +213,48 @@ export function registerRoutes(app: Express): Server {
         } catch (error) {
             console.error('Error updating restaurant:', error);
             res.status(500).json({ message: "Failed to update restaurant" });
+        }
+    });
+
+    // Add account deletion endpoint
+    app.delete("/api/user", ensureAuthenticated, async (req: Request, res: Response) => {
+        try {
+            // Get user's restaurant
+            const [restaurant] = await db.query.restaurants.findMany({
+                where: eq(restaurants.ownerId, req.user!.id)
+            });
+
+            if (restaurant) {
+                // Delete all requests for the restaurant's tables
+                const restaurantTables = await db.query.tables.findMany({
+                    where: eq(tables.restaurantId, restaurant.id)
+                });
+
+                for (const table of restaurantTables) {
+                    await db.delete(requests).where(eq(requests.tableId, table.id));
+                    await db.delete(tableSessions).where(eq(tableSessions.tableId, table.id));
+                }
+
+                // Delete tables
+                await db.delete(tables).where(eq(tables.restaurantId, restaurant.id));
+
+                // Delete restaurant
+                await db.delete(restaurants).where(eq(restaurants.id, restaurant.id));
+            }
+
+            // Delete user
+            await db.delete(users).where(eq(users.id, req.user!.id));
+
+            // Log the user out
+            req.logout((err) => {
+                if (err) {
+                    console.error('Error logging out during account deletion:', err);
+                }
+                res.json({ message: "Account deleted successfully" });
+            });
+        } catch (error) {
+            console.error('Error deleting account:', error);
+            res.status(500).json({ message: "Failed to delete account" });
         }
     });
 
@@ -856,9 +903,9 @@ export function registerRoutes(app: Express): Server {
                 }
             });
 
-            // Filter out sessions where table is null or doesn't belong to this restaurant
+            // Filter out sessions for other restaurants
             const restaurantSessions = sessions.filter(session =>
-                session.table && session.table.restaurantId === Number(restaurantId)
+                session.table.restaurantId === Number(restaurantId)
             );
 
             console.log('Found sessions:', {
