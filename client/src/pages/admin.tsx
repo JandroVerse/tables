@@ -147,9 +147,8 @@ export default function AdminPage() {
     return table ? `Table ${table.name}` : `Table ${tableId}`;
   };
 
-  const statuses = ["pending", "in_progress", "completed"] as const;
+  const statuses = ["in_progress", "completed"] as const;
   const statusTitles = {
-    pending: "Pending Requests",
     in_progress: "In Progress",
     completed: "Completed",
   };
@@ -368,49 +367,20 @@ export default function AdminPage() {
                                 <div className="flex flex-row gap-2">
                                   {status !== "completed" && (
                                     <>
-                                      {status === "pending" && (
-                                        <AlertDialog>
-                                          <AlertDialogTrigger asChild>
-                                            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                              <Button variant="outline">
-                                                Clear
-                                              </Button>
-                                            </motion.div>
-                                          </AlertDialogTrigger>
-                                          <AlertDialogContent>
-                                            <AlertDialogHeader>
-                                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                              <AlertDialogDescription>
-                                                This will remove the request from the queue.
-                                                This action cannot be undone.
-                                              </AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                              <AlertDialogAction
-                                                onClick={() => clearRequest(request.id)}
-                                              >
-                                                Clear Request
-                                              </AlertDialogAction>
-                                            </AlertDialogFooter>
-                                          </AlertDialogContent>
-                                        </AlertDialog>
+                                      {status === "in_progress" && (
+                                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                          <Button
+                                            onClick={() =>
+                                              updateRequest({
+                                                id: request.id,
+                                                status: "completed",
+                                              })
+                                            }
+                                          >
+                                            Complete
+                                          </Button>
+                                        </motion.div>
                                       )}
-                                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                        <Button
-                                          onClick={() =>
-                                            updateRequest({
-                                              id: request.id,
-                                              status:
-                                                status === "pending"
-                                                  ? "in_progress"
-                                                  : "completed",
-                                            })
-                                          }
-                                        >
-                                          {status === "pending" ? "Start" : "Complete"}
-                                        </Button>
-                                      </motion.div>
                                     </>
                                   )}
                                 </div>
