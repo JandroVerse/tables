@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
 import { tables, requests, feedback, tableSessions, restaurants, users } from "@db/schema";
-import { eq, and, isNull, or } from "drizzle-orm";
+import { eq, and, isNull, or, inArray } from "drizzle-orm";
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
 import { customAlphabet } from 'nanoid';
@@ -733,37 +733,74 @@ export function registerRoutes(app: Express): Server {
 
     app.get("/api/requests", async (req: Request, res: Response) => {
         const { tableId, sessionId } = req.query;
-        let query = {};
 
-        if (tableId && sessionId) {
-            const allRequests = await db.query.requests.findMany({
-                where: and(
-                    eq(requests.tableId, Number(tableId)),
-                    eq(requests.sessionId, sessionId as string)
-                ),
+        try {
+            // Get the user's restaurant if authenticated
+            let restaurantId: number | undefined;
+            if (req.isAuthenticated()) {
+                const [restaurant] = await db.query.restaurants.findMany({
+                    where: eq(restaurants.ownerId, req.user!.id),
+                    limit: 1
+                });
+                restaurantId = restaurant?.id;
+            }
+
+            // Base query for requests with table info
+            const baseQuery = {
                 with: {
-                    table: true
+                    table: {
+                        columns: {
+                            id: true,
+                            restaurantId: true,
+                            name: true
+                        }
+                    }
                 }
-            });
-            res.json(allRequests);
-        } else if (tableId) {
+            };
+
+            // Build conditions array
+            let conditions = [];
+
+            // Add table ID condition if provided
+            if (tableId) {
+                conditions.push(eq(requests.tableId, Number(tableId)));
+            }
+
+            // Add session ID condition if provided
+            if (sessionId) {
+                conditions.push(eq(requests.sessionId, sessionId as string));
+            }
+
+            // Add restaurant filter for authenticated users
+            if (restaurantId) {
+                const restaurantTables = await db.query.tables.findMany({
+                    where: eq(tables.restaurantId, restaurantId),
+                    columns: {
+                        id: true
+                    }
+                });
+
+                const tableIds = restaurantTables.map(t => t.id);
+                if (tableIds.length > 0) {
+                    conditions.push(inArray(requests.tableId, tableIds));
+                } else {
+                    // If restaurant has no tables, return empty array
+                    return res.json([]);
+                }
+            }
+
+            // Execute query with all conditions
             const allRequests = await db.query.requests.findMany({
-                where: eq(requests.tableId, Number(tableId)),
-                with: {
-                    table: true
-                }
+                ...baseQuery,
+                where: conditions.length > 0 ? and(...conditions) : undefined,
             });
+
             res.json(allRequests);
-        } else {
-            const allRequests = await db.query.requests.findMany({
-                with: {
-                    table: true
-                }
-            });
-            res.json(allRequests);
+        } catch (error) {
+            console.error('Error fetching requests:', error);
+            res.status(500).json({ message: "Failed to fetch requests" });
         }
     });
-
 
     app.patch("/api/requests/:id", async (req: Request, res: Response) => {
         const { id } = req.params;
