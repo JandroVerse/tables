@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["/api/user"],
     queryFn: async ({ signal }) => {
       try {
-        const res = await apiRequest("GET", "/api/user", undefined, { signal });
+        const res = await apiRequest("GET", "/api/user");
         if (!res.ok && res.status === 401) return null;
         return res.json();
       } catch (e) {
@@ -50,11 +50,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      if (!res.ok) {
-        throw new Error("Invalid username or password");
+      try {
+        const res = await apiRequest("POST", "/api/login", credentials);
+        return await res.json();
+      } catch (error) {
+        // Silently handle 401 errors
+        if ((error as any)?.message?.includes('401')) {
+          throw new Error("Invalid username or password");
+        }
+        throw error;
       }
-      return res.json();
     },
     onSuccess: (user: User) => {
       queryClient.setQueryData(["/api/user"], user);

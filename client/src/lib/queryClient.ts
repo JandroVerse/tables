@@ -14,6 +14,10 @@ async function throwIfResNotOk(res: Response) {
         // If the response isn't JSON or doesn't have shouldClearSession, treat as regular error
       }
     }
+    // Silently handle 401 errors
+    if (res.status === 401) {
+      throw new Error(`Unauthorized`);
+    }
     throw new Error(`${res.status}: ${text || res.statusText}`);
   }
 }
@@ -21,7 +25,7 @@ async function throwIfResNotOk(res: Response) {
 export async function apiRequest(
   method: string,
   url: string,
-  data?: unknown | undefined,
+  data?: unknown,
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
