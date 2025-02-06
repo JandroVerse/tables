@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
 import { AnimatedBackground } from "@/components/animated-background";
 import { LogOut } from "lucide-react";
+import { ProfileMenu } from "@/components/profile-menu";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -188,7 +189,10 @@ export default function AdminPage() {
               ? `${currentRestaurant.name} Dashboard`
               : "Restaurant Admin Dashboard"}
           </h1>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {currentRestaurant && (
+              <ProfileMenu restaurantName={currentRestaurant.name} />
+            )}
             <Link href="/qr">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 <Button variant="outline">View QR Codes</Button>
