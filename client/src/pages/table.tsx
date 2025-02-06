@@ -99,6 +99,7 @@ export default function TablePage() {
   const [sessionError, setSessionError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSessionEnded, setIsSessionEnded] = useState(false);
+  const [currentRestaurant, setCurrentRestaurant] = useState<any | null>(null);
 
 
   const handleSessionSubmit = () => {
@@ -621,10 +622,10 @@ export default function TablePage() {
               >
                 <CardContent className="p-4">
                   <div className="font-medium text-primary relative">
-                    {request.type === "water" ? `${request.table?.name} - Water Refill` :
-                      request.type === "waiter" ? `${request.table?.name} - Call Waiter` :
-                        request.type === "check" ? `${request.table?.name} - Get Check` :
-                          `${request.table?.name} - ${request.type}`}
+                    {request.type === "water" ? `Table ${request.table?.name} - Water Refill` :
+                      request.type === "waiter" ? `Table ${request.table?.name} - Call Waiter` :
+                        request.type === "check" ? `Table ${request.table?.name} - Get Check` :
+                          `Table ${request.table?.name} - ${request.type}`}
                     {count > 1 && (
                       <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
                         {count}
@@ -701,6 +702,26 @@ export default function TablePage() {
       </AnimatePresence>
     );
   };
+
+  useEffect(() => {
+    const fetchRestaurant = async () => {
+      try {
+        const response = await fetch(`/api/restaurants/${restaurantId}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch restaurant: ${response.status}`);
+        }
+        const data = await response.json();
+        setCurrentRestaurant(data);
+      } catch (error) {
+        console.error("Error fetching restaurant:", error);
+        // Handle error appropriately, perhaps display a message
+      }
+    };
+
+    if (restaurantId) {
+      fetchRestaurant();
+    }
+  }, [restaurantId]);
 
   return (
     <div className="min-h-screen bg-background">
