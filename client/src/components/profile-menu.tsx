@@ -32,6 +32,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -50,6 +51,7 @@ export function ProfileMenu({ restaurantName }: { restaurantName: string }) {
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const passwordForm = useForm<z.infer<typeof passwordSchema>>({
     resolver: zodResolver(passwordSchema),
@@ -74,10 +76,22 @@ export function ProfileMenu({ restaurantName }: { restaurantName: string }) {
         const text = await res.text();
         throw new Error(text || "Failed to update password");
       }
+      return res.json();
     },
     onSuccess: () => {
       setIsPasswordDialogOpen(false);
       passwordForm.reset();
+      toast({
+        title: "Success",
+        description: "Password updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -90,9 +104,21 @@ export function ProfileMenu({ restaurantName }: { restaurantName: string }) {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setIsNameDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/restaurant"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/restaurants"] });
+      toast({
+        title: "Success",
+        description: "Restaurant name updated successfully",
+      });
+      nameForm.reset({ name: data.name });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
