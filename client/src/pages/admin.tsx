@@ -34,12 +34,6 @@ const cardVariants = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
 };
 
-const columnVariants = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -20 }
-};
-
 interface CreateRestaurantForm {
   name: string;
   address?: string;
@@ -147,25 +141,8 @@ export default function AdminPage() {
     return table ? `Table ${table.name}` : `Table ${tableId}`;
   };
 
-  const statuses = ["in_progress", "completed"] as const;
-  const statusTitles = {
-    in_progress: "In Progress",
-    completed: "Completed",
-  };
 
   const currentRestaurant = restaurants[0];
-
-  const getSortedRequests = (status: string) => {
-    return requests
-      .filter((r) => r.status === status)
-      .sort((a, b) => {
-        if (status === "completed") {
-          return new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime();
-        } else {
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        }
-      });
-  };
 
   const onSubmit = (data: CreateRestaurantForm) => {
     createRestaurant(data);
@@ -279,123 +256,6 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         )}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {statuses.map((status) => (
-            <motion.div
-              key={status}
-              variants={columnVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{ duration: 0.5 }}
-            >
-              <Card className="h-[calc(100vh-300px)]">
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <CardTitle>{statusTitles[status]}</CardTitle>
-                    {status === "completed" && getSortedRequests("completed").length > 0 && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                            <Button variant="outline" size="sm" className="text-sm">
-                              Clear All
-                            </Button>
-                          </motion.div>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Clear All Completed Requests?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will remove all completed requests from the history.
-                              This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => clearCompleted()}>
-                              Yes, clear all
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <ScrollArea className="h-[calc(100vh-400px)]">
-                    <div className="space-y-2 p-4">
-                      <AnimatePresence mode="popLayout">
-                        {getSortedRequests(status).map((request) => (
-                          <motion.div
-                            key={request.id}
-                            layout
-                            variants={cardVariants}
-                            initial="initial"
-                            animate="animate"
-                            exit="exit"
-                            layoutId={`request-${request.id}`}
-                          >
-                            <Card className={`${
-                              request.type === "waiter"
-                                ? "bg-purple-200"
-                                : request.type === "water"
-                                ? "bg-blue-100"
-                                : request.type === "check"
-                                ? "bg-emerald-200"
-                                : ""
-                            }`}>
-                              <CardContent className="flex items-center justify-between p-4">
-                                <div>
-                                  <h3 className="font-medium">
-                                    {getTableName(request.tableId)} - {
-                                      request.type === "water" ? "Water Refill" :
-                                        request.type === "waiter" ? "Call Waiter" :
-                                          request.type === "check" ? "Get Check" :
-                                            request.type
-                                    }
-                                  </h3>
-                                  {request.notes && (
-                                    <p className="text-sm text-gray-600 mt-1">
-                                      {request.notes}
-                                    </p>
-                                  )}
-                                  <p className="text-sm text-gray-500">
-                                    {new Date(request.createdAt).toLocaleTimeString()}
-                                  </p>
-                                </div>
-                                <div className="flex flex-row gap-2">
-                                  {status !== "completed" && (
-                                    <>
-                                      {status === "in_progress" && (
-                                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                          <Button
-                                            onClick={() =>
-                                              updateRequest({
-                                                id: request.id,
-                                                status: "completed",
-                                              })
-                                            }
-                                          >
-                                            Complete
-                                          </Button>
-                                        </motion.div>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
       </motion.div>
     </div>
   );
