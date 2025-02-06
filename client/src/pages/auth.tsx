@@ -77,6 +77,7 @@ export default function AuthPage() {
                       <FormControl>
                         <Input placeholder="Enter username" {...field} />
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -90,6 +91,7 @@ export default function AuthPage() {
                         <FormControl>
                           <Input type="email" placeholder="Enter email" {...field} />
                         </FormControl>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -118,7 +120,10 @@ export default function AuthPage() {
                   type="button"
                   variant="ghost"
                   className="w-full"
-                  onClick={() => setIsLogin(!isLogin)}
+                  onClick={() => {
+                    setIsLogin(!isLogin);
+                    form.clearErrors();
+                  }}
                 >
                   {isLogin ? "Need an account? Register" : "Already have an account? Login"}
                 </Button>
