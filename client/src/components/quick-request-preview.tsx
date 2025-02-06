@@ -117,8 +117,8 @@ export function QuickRequestPreview({ table, activeRequests, open, onClose }: Qu
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 className={`p-4 rounded-lg ${
-                  request.type === "waiter"
-                    ? "bg-purple-100"
+                  request.type === "waiter" 
+                    ? "bg-purple-100" 
                     : request.type === "water"
                     ? "bg-blue-100"
                     : request.type === "check"
@@ -130,7 +130,7 @@ export function QuickRequestPreview({ table, activeRequests, open, onClose }: Qu
                   <div className="flex items-center gap-3">
                     <RequestIcon type={request.type} />
                     <div>
-                      <div className="font-medium capitalize">{table.name} - {request.type}</div> {/*Added table name here*/}
+                      <div className="font-medium capitalize">{request.type}</div>
                       {request.notes && (
                         <div className="text-sm text-gray-600">{request.notes}</div>
                       )}
