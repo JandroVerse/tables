@@ -15,26 +15,24 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
-import { useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import type { Request, Table as RestaurantTable, Restaurant } from "@db/schema";
+import type { Request, Table, Restaurant } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LogOut } from "lucide-react";
-import { ProfileMenu } from "@/components/profile-menu";
+import { motion, AnimatePresence } from "framer-motion";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
 import { AnimatedBackground } from "@/components/animated-background";
-import { useAuth } from "@/hooks/use-auth";
+import { LogOut } from "lucide-react";
+import { ProfileMenu } from "@/components/profile-menu";
+
+const cardVariants = {
+  initial: { opacity: 0, scale: 0.95 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
+};
 
 interface CreateRestaurantForm {
   name: string;
@@ -46,110 +44,28 @@ export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const form = useForm<CreateRestaurantForm>();
-  const { user } = useAuth();
-  const [, navigate] = useLocation();
 
-  // Redirect if not authenticated
   useEffect(() => {
-    if (!user) {
-      navigate('/auth');
-    }
-  }, [user, navigate]);
-
-  // First query to get restaurants
-  const { data: restaurants = [] } = useQuery<Restaurant[]>({
-    queryKey: ["/api/restaurants"],
-    enabled: !!user,
-  });
-
-  // Get current restaurant early
-  const currentRestaurant = restaurants[0];
-
-  // Query tables after we have the restaurant
-  const { data: tables = [] } = useQuery<RestaurantTable[]>({
-    queryKey: ["/api/restaurants", currentRestaurant?.id, "tables"],
-    enabled: !!currentRestaurant?.id && !!user,
-  });
-
-  // Query requests after we have tables
-  const { data: requests = [] } = useQuery<Request[]>({
-    queryKey: ["/api/requests", currentRestaurant?.id],
-    enabled: !!currentRestaurant?.id && !!user,
-    refetchInterval: 5000, // Refetch every 5 seconds
-    staleTime: 1000, // Consider data stale after 1 second
-  });
-
-  // Handle WebSocket updates
-  const handleWebSocketMessage = useCallback((data: any) => {
-    if (!currentRestaurant?.id || !user) return;
-
-    console.log('[Admin] Received WebSocket message:', data);
-
-    if (data.type === "new_request") {
-      // Optimistically update the cache
-      queryClient.setQueryData(["/api/requests", currentRestaurant.id], (oldData: Request[] = []) => {
-        const newRequest = data.request;
-        // Check if request belongs to this restaurant
-        const table = tables.find(t => t.id === newRequest.tableId);
-        if (table && table.restaurantId === currentRestaurant.id) {
-          const updatedRequests = [newRequest, ...oldData];
-          return updatedRequests.sort((a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-        }
-        return oldData;
-      });
-
-      // Also invalidate to ensure we get the latest state
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
-
-      toast({
-        title: "New Request",
-        description: `New ${data.request.type} request from Table ${tables.find(t => t.id === data.request.tableId)?.name}`,
-      });
-    } else if (data.type === "update_request") {
-      // Optimistically update the cache
-      queryClient.setQueryData(["/api/requests", currentRestaurant.id], (oldData: Request[] = []) => {
-        const updatedList = oldData.map(request =>
-          request.id === data.request.id ? data.request : request
-        );
-        return updatedList.sort((a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-      });
-
-      // Also invalidate to ensure we get the latest state
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
-
-      if (data.request.status === "completed") {
-        toast({
-          title: "Request Completed",
-          description: `Request from Table ${tables.find(t => t.id === data.request.tableId)?.name} has been completed.`,
-        });
-      }
-    }
-  }, [currentRestaurant?.id, queryClient, tables, user, toast]);
-
-  // Connect to WebSocket and handle updates
-  useEffect(() => {
-    if (!user || !currentRestaurant?.id) return;
-
-    console.log('[Admin] Setting up WebSocket connection');
-
-    // Clean up existing connection
-    wsService.disconnect();
-
-    // Establish new connection
     wsService.connect();
-    const unsubscribe = wsService.subscribe(handleWebSocketMessage);
+    const unsubscribe = wsService.subscribe((data) => {
+      if (data.type === "new_request" || data.type === "update_request") {
+        refetch();
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
-    // Cleanup function
-    return () => {
-      console.log('[Admin] Cleaning up WebSocket connection');
-      unsubscribe();
-      wsService.disconnect();
-    };
-  }, [handleWebSocketMessage, user, currentRestaurant?.id]);
+  const { data: restaurants = [], isLoading: isLoadingRestaurants } = useQuery<Restaurant[]>({
+    queryKey: ["/api/restaurants"],
+  });
+
+  const { data: requests = [], refetch } = useQuery<Request[]>({
+    queryKey: ["/api/requests"],
+  });
+
+  const { data: tables = [] } = useQuery<Table[]>({
+    queryKey: ["/api/tables"],
+  });
 
   const { mutate: createRestaurant } = useMutation({
     mutationFn: async (data: CreateRestaurantForm) => {
@@ -163,38 +79,22 @@ export default function AdminPage() {
       });
       form.reset();
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: "Failed to create restaurant. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Restaurant creation failed:", error.message);
+    },
   });
 
   const { mutate: updateRequest } = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
       return apiRequest("PATCH", `/api/requests/${id}`, { status });
     },
-    onMutate: async ({ id, status }) => {
-      // Optimistically update the cache
-      const previousRequests = queryClient.getQueryData(["/api/requests", currentRestaurant?.id]);
-
-      queryClient.setQueryData(["/api/requests", currentRestaurant?.id], (old: Request[] = []) => {
-        return old.map(request =>
-          request.id === id
-            ? { ...request, status }
-            : request
-        );
-      });
-
-      return { previousRequests };
-    },
-    onError: (err, variables, context) => {
-      // Revert on error
-      if (context?.previousRequests) {
-        queryClient.setQueryData(["/api/requests", currentRestaurant?.id], context.previousRequests);
-      }
-      toast({
-        title: "Error updating request",
-        description: "Failed to update the request status. Please try again.",
-        variant: "destructive",
-      });
-    },
     onSuccess: () => {
+      refetch();
       toast({
         title: "Request updated",
         description: "The request status has been updated.",
@@ -202,37 +102,63 @@ export default function AdminPage() {
     },
   });
 
+  const { mutate: clearRequest } = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
+    },
+    onSuccess: () => {
+      refetch();
+      toast({
+        title: "Request cleared",
+        description: "The request has been cleared from the queue.",
+      });
+    },
+  });
+
+  const { mutate: clearCompleted } = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/requests/clear-completed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/requests"] });
+      toast({
+        title: "Cleared completed requests",
+        description: "All completed requests have been cleared.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to clear completed requests. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Failed to clear completed requests:", error);
+    },
+  });
+
+  const getTableName = (tableId: number) => {
+    const table = tables.find(t => t.id === tableId);
+    return table ? `Table ${table.name}` : `Table ${tableId}`;
+  };
+
+
+  const currentRestaurant = restaurants[0];
+
   const onSubmit = (data: CreateRestaurantForm) => {
     createRestaurant(data);
   };
-
-  // Filter requests for each table, only showing active ones
-  const activeRequestsByTable = tables.reduce((acc, table) => {
-    // Only include requests for this restaurant's tables
-    const tableRequests = requests.filter(r =>
-      r.tableId === table.id &&
-      (r.status === "pending" || r.status === "in_progress" || r.status === "completed") // Include completed requests
-    );
-
-    if (tableRequests.length > 0) {
-      acc[table.id] = {
-        tableName: table.name,
-        requests: tableRequests.sort((a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        )
-      };
-    }
-    return acc;
-  }, {} as Record<number, { tableName: string, requests: Request[] }>);
-
-  if (!user) return null;
 
   return (
     <div className="min-h-screen">
       <div className="relative z-0">
         <AnimatedBackground />
       </div>
-      <div className="relative z-10 max-w-[1600px] mx-auto space-y-4 p-4">
+      <motion.div
+        className="relative z-10 max-w-[1600px] mx-auto space-y-4 p-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">
             {currentRestaurant
@@ -241,14 +167,18 @@ export default function AdminPage() {
           </h1>
           <div className="flex gap-2 items-center">
             <Link href="/qr">
-              <Button variant="outline">View QR Codes</Button>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button variant="outline">View QR Codes</Button>
+              </motion.div>
             </Link>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button variant="outline">
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </Button>
+                </motion.div>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
@@ -275,65 +205,7 @@ export default function AdminPage() {
         </div>
 
         {currentRestaurant ? (
-          <>
-            <FloorPlanEditor restaurantId={currentRestaurant.id} />
-
-            {/* Active Requests Table */}
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Active Requests by Table</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-[300px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Table</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead>Time</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {Object.entries(activeRequestsByTable).map(([tableId, { tableName, requests }]) => (
-                        requests.map((request) => (
-                          <TableRow key={request.id}>
-                            <TableCell className="font-medium">Table {tableName}</TableCell>
-                            <TableCell className="capitalize">{request.type}</TableCell>
-                            <TableCell>{request.notes || "-"}</TableCell>
-                            <TableCell>{new Date(request.createdAt).toLocaleTimeString()}</TableCell>
-                            <TableCell className="capitalize">{request.status}</TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  updateRequest({
-                                    id: request.id,
-                                    status: request.status === "pending" ? "in_progress" : request.status === "in_progress" ? "completed" : "pending",
-                                  })
-                                }
-                              >
-                                {request.status === "pending" ? "Start" : request.status === "in_progress" ? "Complete" : "Restart"}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ))}
-                      {Object.keys(activeRequestsByTable).length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center text-muted-foreground">
-                            No active requests
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </>
+          <FloorPlanEditor restaurantId={currentRestaurant.id} />
         ) : (
           <Card>
             <CardHeader>
@@ -384,7 +256,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

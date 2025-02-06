@@ -9,12 +9,11 @@ class WebSocketService {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private pingInterval: number | null = null;
-  private pendingMessages: any[] = [];
+  private isAuthenticated = false;
 
   connect() {
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('[WS] Already connected');
-      this.processPendingMessages();
       return;
     }
 
@@ -28,11 +27,16 @@ class WebSocketService {
 
     if (sessionData) {
       try {
-        const { sessionId } = JSON.parse(sessionData);
-        wsUrl += `?sessionId=${encodeURIComponent(sessionId)}`;
+        const { sessionId: storedSessionId } = JSON.parse(sessionData);
+        wsUrl += `?sessionId=${encodeURIComponent(storedSessionId)}`;
+        this.isAuthenticated = true;
         console.log('[WS] Connecting with session ID');
       } catch (e) {
         console.error('[WS] Error parsing session data:', e);
+        // If there's an error parsing the session, remove it
+        if (tableId) {
+          localStorage.removeItem(`table_session_${tableId}`);
+        }
       }
     }
 
@@ -43,7 +47,6 @@ class WebSocketService {
       console.log('[WS] Connected successfully');
       this.reconnectAttempts = 0;
       this.startPingInterval();
-      this.processPendingMessages();
     };
 
     this.ws.onmessage = (event) => {
@@ -52,7 +55,39 @@ class WebSocketService {
         if (data.type !== 'ping') {
           console.log('[WS] Message received:', data);
         }
-        this.notifyListeners(data);
+
+        // Handle session end message first and ensure proper cleanup
+        if (data.type === 'end_session') {
+          const currentTableId = window.location.pathname.match(/\/request\/\d+\/(\d+)/)?.[1];
+          if (currentTableId && data.tableId === Number(currentTableId)) {
+            console.log('[WS] Session end event received:', data);
+            if (data.reason === 'admin_ended' || data.reason === 'expired') {
+              // Stop ping interval and perform cleanup before disconnecting
+              if (this.pingInterval) {
+                clearInterval(this.pingInterval);
+                this.pingInterval = null;
+              }
+
+              // Ensure WebSocket is closed properly
+              if (this.ws) {
+                this.ws.onclose = null; // Remove onclose handler to prevent reconnection attempts
+                this.ws.close();
+                this.ws = null;
+              }
+
+              this.listeners = [];
+              this.isAuthenticated = false;
+
+              // Clear session and redirect
+              localStorage.removeItem(`table_session_${currentTableId}`);
+              window.location.href = '/session-ended';
+              return;
+            }
+          }
+        }
+
+        // Process other messages if not a session end
+        this.listeners.forEach(listener => listener(data));
       } catch (error) {
         console.error('[WS] Error parsing message:', error);
       }
@@ -62,7 +97,7 @@ class WebSocketService {
       console.log('[WS] Connection closed');
       this.cleanup();
 
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      if (this.isAuthenticated && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
         console.log(`[WS] Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         setTimeout(() => this.connect(), this.reconnectDelay * this.reconnectAttempts);
@@ -71,38 +106,8 @@ class WebSocketService {
 
     this.ws.onerror = (error) => {
       console.error('[WS] Error:', error);
+      this.isAuthenticated = false;
     };
-  }
-
-  private processPendingMessages() {
-    while (this.pendingMessages.length > 0) {
-      const message = this.pendingMessages.shift();
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        try {
-          console.log('[WS] Processing pending message:', message);
-          this.ws.send(JSON.stringify(message));
-        } catch (error) {
-          console.error('[WS] Error sending pending message:', error);
-          // Put the message back in the queue
-          this.pendingMessages.unshift(message);
-          break;
-        }
-      } else {
-        // Put the message back in the queue
-        this.pendingMessages.unshift(message);
-        break;
-      }
-    }
-  }
-
-  private notifyListeners(data: any) {
-    this.listeners.forEach(listener => {
-      try {
-        listener(data);
-      } catch (error) {
-        console.error('[WS] Error in listener:', error);
-      }
-    });
   }
 
   private startPingInterval() {
@@ -114,7 +119,7 @@ class WebSocketService {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.send({ type: 'ping', timestamp: new Date().toISOString() });
       }
-    }, 30000); // Send ping every 30 seconds
+    }, 30000);
   }
 
   private cleanup() {
@@ -131,11 +136,9 @@ class WebSocketService {
         this.ws.send(JSON.stringify(data));
       } catch (error) {
         console.error('[WS] Error sending message:', error);
-        this.pendingMessages.push(data);
       }
     } else {
-      console.warn('[WS] Not connected. Message queued:', data);
-      this.pendingMessages.push(data);
+      console.warn('[WS] Not connected. Message not sent:', data);
       this.connect();
     }
   }
@@ -149,13 +152,11 @@ class WebSocketService {
 
   disconnect() {
     if (this.ws) {
-      this.ws.onclose = null; // Prevent reconnection attempts during intentional disconnect
       this.ws.close();
       this.cleanup();
     }
     this.listeners = [];
-    this.pendingMessages = [];
-    this.reconnectAttempts = 0;
+    this.isAuthenticated = false;
   }
 }
 
