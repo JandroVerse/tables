@@ -190,9 +190,6 @@ export default function AdminPage() {
               : "Restaurant Admin Dashboard"}
           </h1>
           <div className="flex gap-2 items-center">
-            {currentRestaurant && (
-              <ProfileMenu restaurantName={currentRestaurant.name} />
-            )}
             <Link href="/qr">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 <Button variant="outline">View QR Codes</Button>
@@ -225,6 +222,9 @@ export default function AdminPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            {currentRestaurant && (
+              <ProfileMenu restaurantName={currentRestaurant.name} />
+            )}
           </div>
         </div>
 
