@@ -53,27 +53,47 @@ export default function AdminPage() {
   const queryClient = useQueryClient();
   const form = useForm<CreateRestaurantForm>();
 
+  // First query to get restaurants
+  const { data: restaurants = [] } = useQuery<Restaurant[]>({
+    queryKey: ["/api/restaurants"],
+  });
+
+  // Get current restaurant early
+  const currentRestaurant = restaurants[0];
+
+  // Query tables after we have the restaurant
+  const { data: tables = [] } = useQuery<Table[]>({
+    queryKey: ["/api/restaurants", currentRestaurant?.id, "tables"],
+    enabled: !!currentRestaurant?.id,
+  });
+
+  // Query requests with restaurant context
+  const { data: requests = [] } = useQuery<Request[]>({
+    queryKey: ["/api/requests", currentRestaurant?.id],
+    queryFn: async () => {
+      if (!currentRestaurant?.id) return [];
+      const response = await fetch(`/api/requests`);
+      if (!response.ok) throw new Error('Failed to fetch requests');
+      const data = await response.json();
+      return data.filter((request: Request) => {
+        const table = tables.find(t => t.id === request.tableId);
+        return table && table.restaurantId === currentRestaurant.id;
+      });
+    },
+    enabled: !!currentRestaurant?.id && tables.length > 0,
+  });
+
+  // Connect to WebSocket and handle updates
   useEffect(() => {
     wsService.connect();
     const unsubscribe = wsService.subscribe((data) => {
       if (data.type === "new_request" || data.type === "update_request") {
-        refetch();
+        // Invalidate request cache to trigger refetch
+        queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant?.id] });
       }
     });
     return () => unsubscribe();
-  }, []);
-
-  const { data: restaurants = [], isLoading: isLoadingRestaurants } = useQuery<Restaurant[]>({
-    queryKey: ["/api/restaurants"],
-  });
-
-  const { data: requests = [], refetch } = useQuery<Request[]>({
-    queryKey: ["/api/requests"],
-  });
-
-  const { data: tables = [] } = useQuery<Table[]>({
-    queryKey: ["/api/tables"],
-  });
+  }, [currentRestaurant?.id, queryClient]);
 
   const { mutate: createRestaurant } = useMutation({
     mutationFn: async (data: CreateRestaurantForm) => {
@@ -87,14 +107,6 @@ export default function AdminPage() {
       });
       form.reset();
     },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: "Failed to create restaurant. Please try again.",
-        variant: "destructive",
-      });
-      console.error("Restaurant creation failed:", error.message);
-    },
   });
 
   const { mutate: updateRequest } = useMutation({
@@ -102,7 +114,7 @@ export default function AdminPage() {
       return apiRequest("PATCH", `/api/requests/${id}`, { status });
     },
     onSuccess: () => {
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant?.id] });
       toast({
         title: "Request updated",
         description: "The request status has been updated.",
@@ -112,10 +124,8 @@ export default function AdminPage() {
 
   const getTableName = (tableId: number) => {
     const table = tables.find(t => t.id === tableId);
-    return table ? `Table ${table.name}` : `Table ${tableId}`;
+    return table ? table.name : `Table ${tableId}`;
   };
-
-  const currentRestaurant = restaurants[0];
 
   const onSubmit = (data: CreateRestaurantForm) => {
     createRestaurant(data);
@@ -219,30 +229,28 @@ export default function AdminPage() {
                     </TableHeader>
                     <TableBody>
                       {Object.entries(activeRequestsByTable).map(([tableId, { tableName, requests }]) => (
-                        <AnimatePresence mode="popLayout" key={tableId}>
-                          {requests.map((request) => (
-                            <TableRow key={request.id}>
-                              <TableCell className="font-medium">Table {tableName}</TableCell>
-                              <TableCell className="capitalize">{request.type}</TableCell>
-                              <TableCell>{request.notes || "-"}</TableCell>
-                              <TableCell>{new Date(request.createdAt).toLocaleTimeString()}</TableCell>
-                              <TableCell className="capitalize">{request.status}</TableCell>
-                              <TableCell>
-                                <Button
-                                  size="sm"
-                                  onClick={() =>
-                                    updateRequest({
-                                      id: request.id,
-                                      status: request.status === "pending" ? "in_progress" : "completed",
-                                    })
-                                  }
-                                >
-                                  {request.status === "pending" ? "Start" : "Complete"}
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </AnimatePresence>
+                        requests.map((request) => (
+                          <TableRow key={request.id}>
+                            <TableCell className="font-medium">Table {tableName}</TableCell>
+                            <TableCell className="capitalize">{request.type}</TableCell>
+                            <TableCell>{request.notes || "-"}</TableCell>
+                            <TableCell>{new Date(request.createdAt).toLocaleTimeString()}</TableCell>
+                            <TableCell className="capitalize">{request.status}</TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  updateRequest({
+                                    id: request.id,
+                                    status: request.status === "pending" ? "in_progress" : "completed",
+                                  })
+                                }
+                              >
+                                {request.status === "pending" ? "Start" : "Complete"}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
                       ))}
                       {Object.keys(activeRequestsByTable).length === 0 && (
                         <TableRow>
