@@ -19,7 +19,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
 import { useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import type { Request, Table, Restaurant } from "@db/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,6 +27,14 @@ import { FloorPlanEditor } from "@/components/floor-plan-editor";
 import { AnimatedBackground } from "@/components/animated-background";
 import { LogOut } from "lucide-react";
 import { ProfileMenu } from "@/components/profile-menu";
+import {
+  Table as UITable,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
@@ -102,51 +110,34 @@ export default function AdminPage() {
     },
   });
 
-  const { mutate: clearRequest } = useMutation({
-    mutationFn: async (id: number) => {
-      return apiRequest("PATCH", `/api/requests/${id}`, { status: "cleared" });
-    },
-    onSuccess: () => {
-      refetch();
-      toast({
-        title: "Request cleared",
-        description: "The request has been cleared from the queue.",
-      });
-    },
-  });
-
-  const { mutate: clearCompleted } = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", "/api/requests/clear-completed");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/requests"] });
-      toast({
-        title: "Cleared completed requests",
-        description: "All completed requests have been cleared.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: "Failed to clear completed requests. Please try again.",
-        variant: "destructive",
-      });
-      console.error("Failed to clear completed requests:", error);
-    },
-  });
-
   const getTableName = (tableId: number) => {
     const table = tables.find(t => t.id === tableId);
     return table ? `Table ${table.name}` : `Table ${tableId}`;
   };
-
 
   const currentRestaurant = restaurants[0];
 
   const onSubmit = (data: CreateRestaurantForm) => {
     createRestaurant(data);
   };
+
+  // Group active requests by table
+  const activeRequestsByTable = tables.reduce((acc, table) => {
+    const tableRequests = requests.filter(r => 
+      r.tableId === table.id && 
+      (r.status === "pending" || r.status === "in_progress")
+    );
+
+    if (tableRequests.length > 0) {
+      acc[table.id] = {
+        tableName: table.name,
+        requests: tableRequests.sort((a, b) => 
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        )
+      };
+    }
+    return acc;
+  }, {} as Record<number, { tableName: string, requests: Request[] }>);
 
   return (
     <div className="min-h-screen">
@@ -205,7 +196,67 @@ export default function AdminPage() {
         </div>
 
         {currentRestaurant ? (
-          <FloorPlanEditor restaurantId={currentRestaurant.id} />
+          <>
+            <FloorPlanEditor restaurantId={currentRestaurant.id} />
+
+            {/* Active Requests Table */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Active Requests by Table</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[300px]">
+                  <UITable>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Table</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(activeRequestsByTable).map(([tableId, { tableName, requests }]) => (
+                        <AnimatePresence mode="popLayout" key={tableId}>
+                          {requests.map((request) => (
+                            <TableRow key={request.id}>
+                              <TableCell className="font-medium">Table {tableName}</TableCell>
+                              <TableCell className="capitalize">{request.type}</TableCell>
+                              <TableCell>{request.notes || "-"}</TableCell>
+                              <TableCell>{new Date(request.createdAt).toLocaleTimeString()}</TableCell>
+                              <TableCell className="capitalize">{request.status}</TableCell>
+                              <TableCell>
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    updateRequest({
+                                      id: request.id,
+                                      status: request.status === "pending" ? "in_progress" : "completed",
+                                    })
+                                  }
+                                >
+                                  {request.status === "pending" ? "Start" : "Complete"}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </AnimatePresence>
+                      ))}
+                      {Object.keys(activeRequestsByTable).length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-muted-foreground">
+                            No active requests
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </UITable>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </>
         ) : (
           <Card>
             <CardHeader>
