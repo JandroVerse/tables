@@ -34,6 +34,7 @@ import { LogOut } from "lucide-react";
 import { ProfileMenu } from "@/components/profile-menu";
 import { FloorPlanEditor } from "@/components/floor-plan-editor";
 import { AnimatedBackground } from "@/components/animated-background";
+import { useAuth } from "@/hooks/use-auth";
 
 interface CreateRestaurantForm {
   name: string;
@@ -45,10 +46,12 @@ export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const form = useForm<CreateRestaurantForm>();
+  const { user } = useAuth();
 
   // First query to get restaurants
   const { data: restaurants = [] } = useQuery<Restaurant[]>({
     queryKey: ["/api/restaurants"],
+    enabled: !!user,
   });
 
   // Get current restaurant early
@@ -57,18 +60,18 @@ export default function AdminPage() {
   // Query tables after we have the restaurant
   const { data: tables = [] } = useQuery<RestaurantTable[]>({
     queryKey: ["/api/restaurants", currentRestaurant?.id, "tables"],
-    enabled: !!currentRestaurant?.id,
+    enabled: !!currentRestaurant?.id && !!user,
   });
 
   // Query requests after we have tables
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", currentRestaurant?.id],
-    enabled: !!currentRestaurant?.id,
+    enabled: !!currentRestaurant?.id && !!user,
   });
 
   // Handle WebSocket updates
   const handleWebSocketMessage = useCallback((data: any) => {
-    if (!currentRestaurant?.id) return;
+    if (!currentRestaurant?.id || !user) return;
 
     if (data.type === "new_request") {
       // Add new request to the cache
@@ -77,26 +80,51 @@ export default function AdminPage() {
         // Check if request belongs to this restaurant
         const table = tables.find(t => t.id === newRequest.tableId);
         if (table && table.restaurantId === currentRestaurant.id) {
-          return [newRequest, ...oldData];
+          // Keep the list sorted by creation date
+          const updatedRequests = [newRequest, ...oldData];
+          return updatedRequests.sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
         }
         return oldData;
       });
     } else if (data.type === "update_request") {
       // Update existing request in the cache
       queryClient.setQueryData(["/api/requests", currentRestaurant.id], (oldData: Request[] = []) => {
-        return oldData.map(request => 
+        const existingRequest = oldData.find(r => r.id === data.request.id);
+        if (!existingRequest) {
+          // If the request doesn't exist in our cache, fetch fresh data
+          queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
+          return oldData;
+        }
+        // Update the request while maintaining sort order
+        const updatedRequests = oldData.map(request =>
           request.id === data.request.id ? data.request : request
+        );
+        return updatedRequests.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
       });
     }
-  }, [currentRestaurant?.id, queryClient, tables]);
+  }, [currentRestaurant?.id, queryClient, tables, user]);
 
   // Connect to WebSocket and handle updates
   useEffect(() => {
+    if (!user) return; // Only connect if user is authenticated
+
+    // Clean up existing connection
+    wsService.disconnect();
+
+    // Establish new connection
     wsService.connect();
     const unsubscribe = wsService.subscribe(handleWebSocketMessage);
-    return () => unsubscribe();
-  }, [handleWebSocketMessage]);
+
+    // Cleanup function
+    return () => {
+      unsubscribe();
+      wsService.disconnect();
+    };
+  }, [handleWebSocketMessage, user]);
 
   const { mutate: createRestaurant } = useMutation({
     mutationFn: async (data: CreateRestaurantForm) => {
@@ -116,8 +144,32 @@ export default function AdminPage() {
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
       return apiRequest("PATCH", `/api/requests/${id}`, { status });
     },
+    onMutate: async ({ id, status }) => {
+      // Optimistically update the cache
+      const previousRequests = queryClient.getQueryData(["/api/requests", currentRestaurant?.id]);
+
+      queryClient.setQueryData(["/api/requests", currentRestaurant?.id], (old: Request[] = []) => {
+        return old.map(request =>
+          request.id === id
+            ? { ...request, status }
+            : request
+        );
+      });
+
+      return { previousRequests };
+    },
+    onError: (err, variables, context) => {
+      // Revert on error
+      if (context?.previousRequests) {
+        queryClient.setQueryData(["/api/requests", currentRestaurant?.id], context.previousRequests);
+      }
+      toast({
+        title: "Error updating request",
+        description: "Failed to update the request status. Please try again.",
+        variant: "destructive",
+      });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant?.id] });
       toast({
         title: "Request updated",
         description: "The request status has been updated.",
@@ -132,21 +184,23 @@ export default function AdminPage() {
   // Filter requests for each table, only showing active ones
   const activeRequestsByTable = tables.reduce((acc, table) => {
     // Only include requests for this restaurant's tables
-    const tableRequests = requests.filter(r => 
-      r.tableId === table.id && 
+    const tableRequests = requests.filter(r =>
+      r.tableId === table.id &&
       (r.status === "pending" || r.status === "in_progress")
     );
 
     if (tableRequests.length > 0) {
       acc[table.id] = {
         tableName: table.name,
-        requests: tableRequests.sort((a, b) => 
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        requests: tableRequests.sort((a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         )
       };
     }
     return acc;
   }, {} as Record<number, { tableName: string, requests: Request[] }>);
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen">
