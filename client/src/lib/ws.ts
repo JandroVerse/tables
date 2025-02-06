@@ -20,7 +20,21 @@ class WebSocketService {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws`;
+
+    // Add session information to the WebSocket URL if available
+    const tableId = window.location.pathname.match(/\/request\/\d+\/(\d+)/)?.[1];
+    const sessionData = tableId ? localStorage.getItem(`table_session_${tableId}`) : null;
+    let wsUrl = `${protocol}//${host}/ws`;
+
+    if (sessionData) {
+      try {
+        const { sessionId } = JSON.parse(sessionData);
+        wsUrl += `?sessionId=${encodeURIComponent(sessionId)}`;
+        console.log('[WS] Connecting with session ID');
+      } catch (e) {
+        console.error('[WS] Error parsing session data:', e);
+      }
+    }
 
     console.log('[WS] Connecting to:', wsUrl);
     this.ws = new WebSocket(wsUrl);
@@ -60,6 +74,23 @@ class WebSocketService {
     };
   }
 
+  private processPendingMessages() {
+    while (this.pendingMessages.length > 0) {
+      const message = this.pendingMessages.shift();
+      this.send(message);
+    }
+  }
+
+  private notifyListeners(data: any) {
+    this.listeners.forEach(listener => {
+      try {
+        listener(data);
+      } catch (error) {
+        console.error('[WS] Error in listener:', error);
+      }
+    });
+  }
+
   private startPingInterval() {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
@@ -78,23 +109,6 @@ class WebSocketService {
       this.pingInterval = null;
     }
     this.ws = null;
-  }
-
-  private processPendingMessages() {
-    while (this.pendingMessages.length > 0) {
-      const message = this.pendingMessages.shift();
-      this.send(message);
-    }
-  }
-
-  private notifyListeners(data: any) {
-    this.listeners.forEach(listener => {
-      try {
-        listener(data);
-      } catch (error) {
-        console.error('[WS] Error in listener:', error);
-      }
-    });
   }
 
   send(data: any) {

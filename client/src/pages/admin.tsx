@@ -73,8 +73,13 @@ export default function AdminPage() {
   const handleWebSocketMessage = useCallback((data: any) => {
     if (!currentRestaurant?.id || !user) return;
 
+    console.log('[Admin] Received WebSocket message:', data);
+
     if (data.type === "new_request") {
-      // Add new request to the cache
+      // Immediately invalidate the requests query to fetch fresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
+
+      // Optimistically update the cache
       queryClient.setQueryData(["/api/requests", currentRestaurant.id], (oldData: Request[] = []) => {
         const newRequest = data.request;
         // Check if request belongs to this restaurant
@@ -88,29 +93,32 @@ export default function AdminPage() {
         }
         return oldData;
       });
+
+      // Show toast notification for new request
+      toast({
+        title: "New Request",
+        description: `New ${data.request.type} request from Table ${tables.find(t => t.id === data.request.tableId)?.name}`,
+      });
     } else if (data.type === "update_request") {
-      // Update existing request in the cache
+      // Immediately invalidate the requests query
+      queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
+
+      // Optimistically update the cache
       queryClient.setQueryData(["/api/requests", currentRestaurant.id], (oldData: Request[] = []) => {
-        const existingRequest = oldData.find(r => r.id === data.request.id);
-        if (!existingRequest) {
-          // If the request doesn't exist in our cache, fetch fresh data
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
-          return oldData;
-        }
-        // Update the request while maintaining sort order
-        const updatedRequests = oldData.map(request =>
+        return oldData.map(request =>
           request.id === data.request.id ? data.request : request
-        );
-        return updatedRequests.sort((a, b) => 
+        ).sort((a, b) => 
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
       });
     }
-  }, [currentRestaurant?.id, queryClient, tables, user]);
+  }, [currentRestaurant?.id, queryClient, tables, user, toast]);
 
   // Connect to WebSocket and handle updates
   useEffect(() => {
-    if (!user) return; // Only connect if user is authenticated
+    if (!user || !currentRestaurant?.id) return;
+
+    console.log('[Admin] Setting up WebSocket connection');
 
     // Clean up existing connection
     wsService.disconnect();
@@ -121,10 +129,11 @@ export default function AdminPage() {
 
     // Cleanup function
     return () => {
+      console.log('[Admin] Cleaning up WebSocket connection');
       unsubscribe();
       wsService.disconnect();
     };
-  }, [handleWebSocketMessage, user]);
+  }, [handleWebSocketMessage, user, currentRestaurant?.id]);
 
   const { mutate: createRestaurant } = useMutation({
     mutationFn: async (data: CreateRestaurantForm) => {
