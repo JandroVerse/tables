@@ -974,26 +974,22 @@ export default function TablePage() {
                 <Button
                   variant="destructive"
                   className="w-full"
-                  size="lg"
                 >
-                  End Session
+                  End Table Session
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent className="bg-white dark:bg-slate-900">
+              <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>End Session</AlertDialogTitle>
+                  <AlertDialogTitle>End Table Session?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want                    to end this session? All pending
-                    requests will be cleared and the table will be available
-                    for new sessions.
+                    This will end the current session for all users at this table.
+                    Any active requests will be cancelled.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => endSession()}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    Yes, End Session
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => endSession()}>
+                    End Session
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
