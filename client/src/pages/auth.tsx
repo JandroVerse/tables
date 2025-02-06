@@ -99,7 +99,7 @@ export default function AuthPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Password</FormLabel>
+                      <FormLabel className="text-foreground">Password</FormLabel>
                       <FormControl>
                         <Input type="password" placeholder="Enter password" {...field} />
                       </FormControl>
