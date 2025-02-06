@@ -15,32 +15,25 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { apiRequest } from "@/lib/queryClient";
-import { wsService } from "@/lib/ws";
-import { useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
-import type { Request, Table, Restaurant } from "@db/schema";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { motion, AnimatePresence } from "framer-motion";
-import { FloorPlanEditor } from "@/components/floor-plan-editor";
-import { AnimatedBackground } from "@/components/animated-background";
-import { LogOut } from "lucide-react";
-import { ProfileMenu } from "@/components/profile-menu";
 import {
-  Table as UITable,
+  Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-const cardVariants = {
-  initial: { opacity: 0, scale: 0.95 },
-  animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
-};
+import { apiRequest } from "@/lib/queryClient";
+import { wsService } from "@/lib/ws";
+import { useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
+import type { Request, Table as RestaurantTable, Restaurant } from "@db/schema";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { LogOut } from "lucide-react";
+import { ProfileMenu } from "@/components/profile-menu";
+import { FloorPlanEditor } from "@/components/floor-plan-editor";
+import { AnimatedBackground } from "@/components/animated-background";
 
 interface CreateRestaurantForm {
   name: string;
@@ -62,20 +55,21 @@ export default function AdminPage() {
   const currentRestaurant = restaurants[0];
 
   // Query tables after we have the restaurant
-  const { data: tables = [] } = useQuery<Table[]>({
+  const { data: tables = [] } = useQuery<RestaurantTable[]>({
     queryKey: ["/api/restaurants", currentRestaurant?.id, "tables"],
     enabled: !!currentRestaurant?.id,
   });
 
-  // Query requests with restaurant context
+  // Query requests after we have tables
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", currentRestaurant?.id],
     queryFn: async () => {
       if (!currentRestaurant?.id) return [];
-      const response = await fetch(`/api/requests`);
+      const response = await fetch("/api/requests");
       if (!response.ok) throw new Error('Failed to fetch requests');
-      const data = await response.json();
-      return data.filter((request: Request) => {
+      const allRequests = await response.json();
+      // Filter requests for current restaurant's tables
+      return allRequests.filter((request: Request) => {
         const table = tables.find(t => t.id === request.tableId);
         return table && table.restaurantId === currentRestaurant.id;
       });
@@ -88,8 +82,10 @@ export default function AdminPage() {
     wsService.connect();
     const unsubscribe = wsService.subscribe((data) => {
       if (data.type === "new_request" || data.type === "update_request") {
-        // Invalidate request cache to trigger refetch
-        queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant?.id] });
+        // Only invalidate if the request belongs to current restaurant
+        if (data.restaurantId === currentRestaurant?.id) {
+          queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
+        }
       }
     });
     return () => unsubscribe();
@@ -122,17 +118,13 @@ export default function AdminPage() {
     },
   });
 
-  const getTableName = (tableId: number) => {
-    const table = tables.find(t => t.id === tableId);
-    return table ? table.name : `Table ${tableId}`;
-  };
-
   const onSubmit = (data: CreateRestaurantForm) => {
     createRestaurant(data);
   };
 
-  // Group active requests by table
+  // Filter requests for each table, only showing active ones
   const activeRequestsByTable = tables.reduce((acc, table) => {
+    // Only include requests for this restaurant's tables
     const tableRequests = requests.filter(r => 
       r.tableId === table.id && 
       (r.status === "pending" || r.status === "in_progress")
@@ -154,12 +146,7 @@ export default function AdminPage() {
       <div className="relative z-0">
         <AnimatedBackground />
       </div>
-      <motion.div
-        className="relative z-10 max-w-[1600px] mx-auto space-y-4 p-4"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
+      <div className="relative z-10 max-w-[1600px] mx-auto space-y-4 p-4">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">
             {currentRestaurant
@@ -168,18 +155,14 @@ export default function AdminPage() {
           </h1>
           <div className="flex gap-2 items-center">
             <Link href="/qr">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button variant="outline">View QR Codes</Button>
-              </motion.div>
+              <Button variant="outline">View QR Codes</Button>
             </Link>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button variant="outline">
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Logout
-                  </Button>
-                </motion.div>
+                <Button variant="outline">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
@@ -216,7 +199,7 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[300px]">
-                  <UITable>
+                  <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Table</TableHead>
@@ -260,7 +243,7 @@ export default function AdminPage() {
                         </TableRow>
                       )}
                     </TableBody>
-                  </UITable>
+                  </Table>
                 </ScrollArea>
               </CardContent>
             </Card>
@@ -315,7 +298,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }

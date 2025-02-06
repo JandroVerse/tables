@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { db } from "@db";
 import { tables, requests, feedback, tableSessions, restaurants, users } from "@db/schema";
-import { eq, and, isNull, or, inArray } from "drizzle-orm";
+import { eq, and, isNull, or, inArray, desc } from "drizzle-orm";
 import QRCode from "qrcode";
 import { nanoid } from "nanoid";
 import { customAlphabet } from 'nanoid';
@@ -731,20 +731,9 @@ export function registerRoutes(app: Express): Server {
         }
     });
 
+    // Update the requests endpoint to properly handle restaurant filtering
     app.get("/api/requests", async (req: Request, res: Response) => {
-        const { tableId, sessionId } = req.query;
-
         try {
-            // Get the user's restaurant if authenticated
-            let restaurantId: number | undefined;
-            if (req.isAuthenticated()) {
-                const [restaurant] = await db.query.restaurants.findMany({
-                    where: eq(restaurants.ownerId, req.user!.id),
-                    limit: 1
-                });
-                restaurantId = restaurant?.id;
-            }
-
             // Base query for requests with table info
             const baseQuery = {
                 with: {
@@ -760,6 +749,7 @@ export function registerRoutes(app: Express): Server {
 
             // Build conditions array
             let conditions = [];
+            const { tableId, sessionId } = req.query;
 
             // Add table ID condition if provided
             if (tableId) {
@@ -769,6 +759,16 @@ export function registerRoutes(app: Express): Server {
             // Add session ID condition if provided
             if (sessionId) {
                 conditions.push(eq(requests.sessionId, sessionId as string));
+            }
+
+            // Get the user's restaurant if authenticated
+            let restaurantId: number | undefined;
+            if (req.isAuthenticated()) {
+                const [restaurant] = await db.query.restaurants.findMany({
+                    where: eq(restaurants.ownerId, req.user!.id),
+                    limit: 1
+                });
+                restaurantId = restaurant?.id;
             }
 
             // Add restaurant filter for authenticated users
@@ -783,9 +783,6 @@ export function registerRoutes(app: Express): Server {
                 const tableIds = restaurantTables.map(t => t.id);
                 if (tableIds.length > 0) {
                     conditions.push(inArray(requests.tableId, tableIds));
-                } else {
-                    // If restaurant has no tables, return empty array
-                    return res.json([]);
                 }
             }
 
@@ -793,6 +790,7 @@ export function registerRoutes(app: Express): Server {
             const allRequests = await db.query.requests.findMany({
                 ...baseQuery,
                 where: conditions.length > 0 ? and(...conditions) : undefined,
+                orderBy: (req) => [desc(req.createdAt)]
             });
 
             res.json(allRequests);
@@ -802,79 +800,47 @@ export function registerRoutes(app: Express): Server {
         }
     });
 
+    // Update the PATCH endpoint to broadcast updates correctly
     app.patch("/api/requests/:id", async (req: Request, res: Response) => {
         const { id } = req.params;
         const { status } = req.body;
 
-        const [request] = await db
-            .update(requests)
-            .set({
-                status,
-                ...(status === "completed" ? { completedAt: new Date() } : {}),
-            })
-            .where(eq(requests.id, Number(id)))
-            .returning();
+        try {
+            const [request] = await db
+                .update(requests)
+                .set({
+                    status,
+                    ...(status === "completed" ? { completedAt: new Date() } : {}),
+                })
+                .where(eq(requests.id, Number(id)))
+                .returning();
 
-        // Broadcast the updated request to all connected clients
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                    type: "update_request",
-                    request,
-                    tableId: request.tableId
-                }));
+            if (!request) {
+                return res.status(404).json({ message: "Request not found" });
             }
-        });
 
-        res.json(request);
-    });
-
-    // Feedback routes
-    app.post("/api/feedback", async (req: Request, res: Response) => {
-        const { requestId, rating, comment } = req.body;
-
-        const request = await db.query.requests.findFirst({
-            where: eq(requests.id, requestId),
-        });
-
-        if (!request) {
-            return res.status(404).json({ message: "Request not found" });
-        }
-
-        if (request.status !== "completed") {
-            return res.status(400).json({
-                message: "Can only provide feedback for completed requests"
+            // Get the associated table for this request
+            const [table] = await db.query.tables.findMany({
+                where: eq(tables.id, request.tableId),
             });
-        }
 
-        const existingFeedback = await db.query.feedback.findFirst({
-            where: eq(feedback.requestId, requestId),
-        });
-
-        if (existingFeedback) {
-            return res.status(400).json({
-                message: "Feedback already submitted for this request"
+            // Broadcast the updated request to all connected clients
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({
+                        type: "update_request",
+                        request,
+                        tableId: request.tableId,
+                        restaurantId: table?.restaurantId
+                    }));
+                }
             });
+
+            res.json(request);
+        } catch (error) {
+            console.error('Error updating request:', error);
+            res.status(500).json({ message: "Failed to update request" });
         }
-
-        const [newFeedback] = await db.insert(feedback)
-            .values({
-                requestId,
-                rating,
-                comment,
-            })
-            .returning();
-
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                    type: "new_feedback",
-                    feedback: newFeedback
-                }));
-            }
-        });
-
-        res.json(newFeedback);
     });
 
     app.get("/api/feedback", async (req: Request, res: Response) => {
