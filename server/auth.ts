@@ -5,10 +5,11 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { users, insertUserSchema, selectUserSchema, type SelectUser, type InsertUser } from "@db/schema";
+import { users, restaurants, selectUserSchema, type SelectUser } from "@db/schema";
 import { db, pool } from "@db";
 import { eq } from "drizzle-orm";
 import { fromZodError } from "zod-validation-error";
+import { z } from "zod";
 
 declare global {
   namespace Express {
@@ -35,6 +36,19 @@ async function comparePasswords(supplied: string, stored: string) {
 async function getUserByUsername(username: string) {
   return db.select().from(users).where(eq(users.username, username)).limit(1);
 }
+
+// Extended schema to include restaurant details
+const registerSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email("Invalid email"),
+  role: z.enum(["owner", "staff"]),
+  restaurantDetails: z.object({
+    name: z.string().min(1, "Restaurant name is required"),
+    address: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
+  })
+});
 
 export function setupAuth(app: Express) {
   const store = new PostgresSessionStore({ 
@@ -70,7 +84,7 @@ export function setupAuth(app: Express) {
       try {
         const [user] = await getUserByUsername(username);
         if (!user || !(await comparePasswords(password, user.password))) {
-          return done(null, false, { message: "Invalid credentials" });
+          return done(null, false, { message: "Invalid username or password" });
         }
         return done(null, user);
       } catch (error) {
@@ -101,7 +115,7 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/register", async (req, res, next) => {
-    const result = insertUserSchema.safeParse(req.body);
+    const result = registerSchema.safeParse(req.body);
     if (!result.success) {
       const error = fromZodError(result.error);
       return res.status(400).json({ message: error.message });
@@ -113,19 +127,38 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "Username already exists" });
       }
 
-      const [user] = await db
-        .insert(users)
-        .values({
-          ...result.data,
-          password: await hashPassword(result.data.password),
-        })
-        .returning();
+      // Start a transaction to create both user and restaurant
+      const [user] = await db.transaction(async (tx) => {
+        // Create user first
+        const [newUser] = await tx
+          .insert(users)
+          .values({
+            username: result.data.username,
+            password: await hashPassword(result.data.password),
+            email: result.data.email,
+            role: result.data.role,
+          })
+          .returning();
+
+        // Create restaurant
+        await tx
+          .insert(restaurants)
+          .values({
+            name: result.data.restaurantDetails.name,
+            ownerId: newUser.id,
+            address: result.data.restaurantDetails.address,
+            phone: result.data.restaurantDetails.phone,
+          });
+
+        return [newUser];
+      });
 
       req.login(user, (err) => {
         if (err) return next(err);
         res.status(201).json(user);
       });
     } catch (error) {
+      console.error('Registration error:', error);
       next(error);
     }
   });

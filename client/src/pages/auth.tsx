@@ -7,20 +7,37 @@ import { useForm } from "react-hook-form";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
-interface AuthForm {
-  username: string;
-  password: string;
-  email?: string;
-  role?: string;
-}
+const registerSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email("Invalid email"),
+  restaurantName: z.string().min(1, "Restaurant name is required"),
+  restaurantAddress: z.string().optional(),
+  restaurantPhone: z.string().optional(),
+});
+
+type AuthForm = z.infer<typeof registerSchema>;
 
 export default function AuthPage() {
   const [_, setLocation] = useLocation();
   const { loginMutation, registerMutation, user } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [shake, setShake] = useState(false);
-  const form = useForm<AuthForm>();
+
+  const form = useForm<AuthForm>({
+    resolver: isLogin ? undefined : zodResolver(registerSchema),
+    defaultValues: {
+      username: "",
+      password: "",
+      email: "",
+      restaurantName: "",
+      restaurantAddress: "",
+      restaurantPhone: "",
+    }
+  });
 
   // If already logged in, redirect to admin
   useEffect(() => {
@@ -32,12 +49,21 @@ export default function AuthPage() {
   const onSubmit = async (data: AuthForm) => {
     try {
       if (isLogin) {
-        await loginMutation.mutateAsync(data);
+        await loginMutation.mutateAsync({
+          username: data.username,
+          password: data.password
+        });
       } else {
         await registerMutation.mutateAsync({
-          ...data,
+          username: data.username,
+          password: data.password,
+          email: data.email,
           role: "owner",
-          email: data.email || "",
+          restaurantDetails: {
+            name: data.restaurantName,
+            address: data.restaurantAddress || null,
+            phone: data.restaurantPhone || null,
+          }
         });
       }
     } catch (error) {
@@ -48,7 +74,7 @@ export default function AuthPage() {
       // Set form error
       form.setError("password", {
         type: "manual",
-        message: "Incorrect username or password"
+        message: isLogin ? "Incorrect username or password" : "Registration failed"
       });
     }
   };
@@ -63,7 +89,7 @@ export default function AuthPage() {
       >
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>{isLogin ? "Login" : "Register"}</CardTitle>
+            <CardTitle>{isLogin ? "Login" : "Register Restaurant"}</CardTitle>
           </CardHeader>
           <CardContent>
             <Form {...form}>
@@ -82,19 +108,60 @@ export default function AuthPage() {
                   )}
                 />
                 {!isLogin && (
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="Enter email" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="Enter email" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="restaurantName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Restaurant Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter restaurant name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="restaurantAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Restaurant Address (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter restaurant address" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="restaurantPhone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Restaurant Phone (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter restaurant phone" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
                 )}
                 <FormField
                   control={form.control}
@@ -123,6 +190,7 @@ export default function AuthPage() {
                   onClick={() => {
                     setIsLogin(!isLogin);
                     form.clearErrors();
+                    form.reset();
                   }}
                 >
                   {isLogin ? "Need an account? Register" : "Already have an account? Login"}
