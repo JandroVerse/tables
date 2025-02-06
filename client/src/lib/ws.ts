@@ -19,54 +19,35 @@ class WebSocketService {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
+    const tableId = window.location.pathname.match(/\/request\/\d+\/(\d+)/)?.[1];
+    const sessionData = tableId ? localStorage.getItem(`table_session_${tableId}`) : null;
+    let wsUrl = `${protocol}//${host}/ws`;
 
-    // Check for authentication before connecting
-    fetch('/api/user')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Not authenticated');
-        }
-        return response.json();
-      })
-      .then(() => {
-        // Only connect WebSocket if authenticated
-        let wsUrl = `${protocol}//${host}/ws`;
+    if (sessionData) {
+      try {
+        const { sessionId: storedSessionId } = JSON.parse(sessionData);
+        wsUrl += `?sessionId=${encodeURIComponent(storedSessionId)}`;
+        this.isAuthenticated = true;
+        console.log('[WS] Connecting with session ID');
 
-        // Add session information to the WebSocket URL if available
-        const tableId = window.location.pathname.match(/\/request\/\d+\/(\d+)/)?.[1];
-        const sessionData = tableId ? localStorage.getItem(`table_session_${tableId}`) : null;
-
-        if (sessionData) {
-          try {
-            const { sessionId: storedSessionId } = JSON.parse(sessionData);
-            wsUrl += `?sessionId=${encodeURIComponent(storedSessionId)}`;
-            this.isAuthenticated = true;
-            console.log('[WS] Connecting with session ID');
-          } catch (e) {
-            console.error('[WS] Error parsing session data:', e);
-            if (tableId) {
-              localStorage.removeItem(`table_session_${tableId}`);
-            }
-          }
-        }
-
-        console.log('[WS] Connecting to:', wsUrl);
         this.ws = new WebSocket(wsUrl);
-
         this.ws.onopen = () => {
           console.log('[WS] Connected successfully');
           this.reconnectAttempts = 0;
           this.startPingInterval();
         };
-
         this.ws.onmessage = this.handleMessage.bind(this);
         this.ws.onclose = this.handleClose.bind(this);
         this.ws.onerror = this.handleError.bind(this);
-      })
-      .catch(error => {
-        console.error('[WS] Authentication check failed:', error);
-        this.isAuthenticated = false;
-      });
+      } catch (e) {
+        console.error('[WS] Error parsing session data:', e);
+        if (tableId) {
+          localStorage.removeItem(`table_session_${tableId}`);
+        }
+      }
+    } else {
+      console.log('[WS] No session data available');
+    }
   }
 
   private handleMessage(event: MessageEvent) {

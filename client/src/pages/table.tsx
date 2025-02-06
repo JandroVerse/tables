@@ -303,7 +303,7 @@ export default function TablePage() {
     queryKey: ["/api/requests", tableId],
     queryFn: async () => {
       if (!sessionId) return [];
-      const res = await fetch(`/api/requests?tableId=${tableId}&sessionId=${sessionId}`);
+      const res = await fetch(`/api/requests?tableId=${tableId}&sessionId=${sessionId}&include=table`);
       if (!res.ok) throw new Error("Failed to fetch requests");
       return res.json();
     },
@@ -596,108 +596,113 @@ export default function TablePage() {
     return (
       <AnimatePresence mode="popLayout">
         <div className="space-y-3">
-          {Object.values(groupedRequests).map(({ request, count, ids }) => (
-            <motion.div
-              key={ids.join('-')}
-              layout
-              variants={cardVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={{
-                layout: { duration: 0.3 },
-                opacity: { duration: 0.2 },
-              }}
-            >
-              <Card
-                className={`overflow-hidden transition-colors ${
-                  request.type === "waiter"
-                    ? "hover:bg-purple-300 bg-purple-200"
-                    : request.type === "water"
-                    ? "hover:bg-blue-200 bg-blue-100"
-                    : request.type === "check"
-                    ? "hover:bg-emerald-300 bg-emerald-200"
-                    : "hover:bg-green-50/50"
-                }`}
+          {Object.values(groupedRequests).map(({ request, count, ids }) => {
+            // Get the table name safely
+            const tableName = request.table?.name || `Table ${request.tableId}`;
+
+            return (
+              <motion.div
+                key={ids.join('-')}
+                layout
+                variants={cardVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={{
+                  layout: { duration: 0.3 },
+                  opacity: { duration: 0.2 },
+                }}
               >
-                <CardContent className="p-4">
-                  <div className="font-medium text-primary relative">
-                    {request.type === "water" ? `${request.table?.name} - Water Refill` :
-                      request.type === "waiter" ? `${request.table?.name} - Call Waiter` :
-                        request.type === "check" ? `${request.table?.name} - Get Check` :
-                          `${request.table?.name} - ${request.type}`}
-                    {count > 1 && (
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
-                        {count}
-                      </span>
-                    )}
-                  </div>
-                  {request.notes && (
-                    <div className="text-sm text-gray-600 mt-2">
-                      {request.notes}
+                <Card
+                  className={`overflow-hidden transition-colors ${
+                    request.type === "waiter"
+                      ? "hover:bg-purple-300 bg-purple-200"
+                      : request.type === "water"
+                      ? "hover:bg-blue-200 bg-blue-100"
+                      : request.type === "check"
+                      ? "hover:bg-emerald-300 bg-emerald-200"
+                      : "hover:bg-green-50/50"
+                  }`}
+                >
+                  <CardContent className="p-4">
+                    <div className="font-medium text-primary relative">
+                      {request.type === "water" ? `${tableName} - Water Refill` :
+                        request.type === "waiter" ? `${tableName} - Call Waiter` :
+                          request.type === "check" ? `${tableName} - Get Check` :
+                            `${tableName} - ${request.type}`}
+                      {count > 1 && (
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                          {count}
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <div className="flex justify-between items-center mt-2">
-                    <motion.div
-                      className="text-sm"
-                      variants={statusVariants}
-                      animate={request.status as keyof typeof statusVariants}
-                      transition={{ duration: 0.3 }}
-                    >
-                      Status:{" "}
-                      <span className="capitalize">
-                        {request.status === "in_progress" ? "In Progress" :
-                          request.status === "pending" ? "Pending" :
-                            request.status === "completed" ? "Completed" :
-                              request.status === "cleared" ? "Cancelled" :
-                                request.status}
-                      </span>
-                    </motion.div>
-                    {request.status === "pending" && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <motion.div
-                            variants={buttonVariants}
-                            initial="idle"
-                            whileHover="hover"
-                            whileTap="tap"
-                          >
-                            <Button variant="outline" size="sm">
-                              Cancel Request{count > 1 ? 's' : ''}
-                            </Button>
-                          </motion.div>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              Cancel Request{count > 1 ? 's' : ''}?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to cancel {count > 1 ? 'these' : 'this'}{' '}
-                              request{count > 1 ? 's' : ''}? This action cannot be
-                              undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>
-                              No, keep {count > 1 ? 'them' : 'it'}
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() =>
-                                ids.forEach(id => cancelRequest(id))
-                              }
-                            >
-                              Yes, cancel {count > 1 ? 'them' : 'it'}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                    {request.notes && (
+                      <div className="text-sm text-gray-600 mt-2">
+                        {request.notes}
+                      </div>
                     )}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                    <div className="flex justify-between items-center mt-2">
+                      <motion.div
+                        className="text-sm"
+                        variants={statusVariants}
+                        animate={request.status as keyof typeof statusVariants}
+                        transition={{ duration: 0.3 }}
+                      >
+                        Status:{" "}
+                        <span className="capitalize">
+                          {request.status === "in_progress" ? "In Progress" :
+                            request.status === "pending" ? "Pending" :
+                              request.status === "completed" ? "Completed" :
+                                request.status === "cleared" ? "Cancelled" :
+                                  request.status}
+                        </span>
+                      </motion.div>
+                      {request.status === "pending" && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <motion.div
+                              variants={buttonVariants}
+                              initial="idle"
+                              whileHover="hover"
+                              whileTap="tap"
+                            >
+                              <Button variant="outline" size="sm">
+                                Cancel Request{count > 1 ? 's' : ''}
+                              </Button>
+                            </motion.div>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Cancel Request{count > 1 ? 's' : ''}?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to cancel {count > 1 ? 'these' : 'this'}{' '}
+                                request{count > 1 ? 's' : ''}? This action cannot be
+                                undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>
+                                No, keep {count > 1 ? 'them' : 'it'}
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() =>
+                                  ids.forEach(id => cancelRequest(id))
+                                }
+                              >
+                                Yes, cancel {count > 1 ? 'them' : 'it'}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
         </div>
       </AnimatePresence>
     );
@@ -1017,5 +1022,5 @@ export default function TablePage() {
 }
 
 interface RequestWithTable extends Request {
-  table?: Table;
+  table: Table | null;
 }
