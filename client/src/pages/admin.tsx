@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table";
 import { apiRequest } from "@/lib/queryClient";
 import { wsService } from "@/lib/ws";
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import type { Request, Table as RestaurantTable, Restaurant } from "@db/schema";
@@ -63,33 +63,40 @@ export default function AdminPage() {
   // Query requests after we have tables
   const { data: requests = [] } = useQuery<Request[]>({
     queryKey: ["/api/requests", currentRestaurant?.id],
-    queryFn: async () => {
-      if (!currentRestaurant?.id) return [];
-      const response = await fetch("/api/requests");
-      if (!response.ok) throw new Error('Failed to fetch requests');
-      const allRequests = await response.json();
-      // Filter requests for current restaurant's tables
-      return allRequests.filter((request: Request) => {
-        const table = tables.find(t => t.id === request.tableId);
-        return table && table.restaurantId === currentRestaurant.id;
-      });
-    },
-    enabled: !!currentRestaurant?.id && tables.length > 0,
+    enabled: !!currentRestaurant?.id,
   });
+
+  // Handle WebSocket updates
+  const handleWebSocketMessage = useCallback((data: any) => {
+    if (!currentRestaurant?.id) return;
+
+    if (data.type === "new_request") {
+      // Add new request to the cache
+      queryClient.setQueryData(["/api/requests", currentRestaurant.id], (oldData: Request[] = []) => {
+        const newRequest = data.request;
+        // Check if request belongs to this restaurant
+        const table = tables.find(t => t.id === newRequest.tableId);
+        if (table && table.restaurantId === currentRestaurant.id) {
+          return [newRequest, ...oldData];
+        }
+        return oldData;
+      });
+    } else if (data.type === "update_request") {
+      // Update existing request in the cache
+      queryClient.setQueryData(["/api/requests", currentRestaurant.id], (oldData: Request[] = []) => {
+        return oldData.map(request => 
+          request.id === data.request.id ? data.request : request
+        );
+      });
+    }
+  }, [currentRestaurant?.id, queryClient, tables]);
 
   // Connect to WebSocket and handle updates
   useEffect(() => {
     wsService.connect();
-    const unsubscribe = wsService.subscribe((data) => {
-      if (data.type === "new_request" || data.type === "update_request") {
-        // Only invalidate if the request belongs to current restaurant
-        if (data.restaurantId === currentRestaurant?.id) {
-          queryClient.invalidateQueries({ queryKey: ["/api/requests", currentRestaurant.id] });
-        }
-      }
-    });
+    const unsubscribe = wsService.subscribe(handleWebSocketMessage);
     return () => unsubscribe();
-  }, [currentRestaurant?.id, queryClient]);
+  }, [handleWebSocketMessage]);
 
   const { mutate: createRestaurant } = useMutation({
     mutationFn: async (data: CreateRestaurantForm) => {
