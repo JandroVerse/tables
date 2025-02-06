@@ -903,18 +903,12 @@ export function registerRoutes(app: Express): Server {
                 }
             });
 
-            // Filter out sessions for other restaurants
-            const restaurantSessions = sessions.filter(session =>
-                session.table.restaurantId === Number(restaurantId)
+            // Filter sessions to only include those for tables in this restaurant
+            const filteredSessions = sessions.filter(session =>
+                session.table && session.table.restaurantId === Number(restaurantId)
             );
 
-            console.log('Found sessions:', {
-                restaurantId,
-                totalActiveSessions: sessions.length,
-                restaurantSessions: restaurantSessions.length
-            });
-
-            res.json(restaurantSessions);
+            res.json(filteredSessions);
         } catch (error) {
             console.error('Error fetching table sessions:', error);
             res.status(500).json({ message: "Failed to fetch table sessions" });
