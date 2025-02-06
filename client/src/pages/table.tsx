@@ -99,8 +99,38 @@ export default function TablePage() {
   const [sessionError, setSessionError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSessionEnded, setIsSessionEnded] = useState(false);
-  const [currentRestaurant, setCurrentRestaurant] = useState<any | null>(null);
 
+
+  // Get restaurants for the current user
+  const { data: currentRestaurant, isLoading: isRestaurantLoading } = useQuery({
+    queryKey: [`/api/restaurants/${restaurantId}`],
+    queryFn: async () => {
+      const response = await fetch(`/api/restaurants/${restaurantId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch restaurant: ${response.status}`);
+      }
+      return response.json();
+    },
+    enabled: !!restaurantId && !isNaN(restaurantId),
+  });
+
+  // Loading state
+  if (isValidating || isRestaurantLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card className="w-[90%] max-w-md">
+          <CardHeader>
+            <CardTitle>Loading...</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">
+              {isValidating ? "Verifying table information..." : "Loading restaurant details..."}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const handleSessionSubmit = () => {
     if (!sessionInputValue) {
@@ -127,12 +157,14 @@ export default function TablePage() {
     queryClient.invalidateQueries({ queryKey: ["/api/requests", tableId] });
   };
 
-  // Verify table and manage session
+  // Add debug logging for table verification
   useEffect(() => {
     if (restaurantId && tableId && !isNaN(restaurantId) && !isNaN(tableId)) {
+      console.log('Verifying table:', { restaurantId, tableId });
       fetch(`/api/restaurants/${restaurantId}/tables/${tableId}/verify`)
         .then((res) => res.json())
         .then((data) => {
+          console.log('Table verification response:', data);
           if (data.valid) {
             setIsValid(true);
             if (data.activeSession) {
@@ -151,7 +183,6 @@ export default function TablePage() {
                 );
               }
             } else if (data.shouldClearSession) {
-              // Clear session and redirect if server indicates session is invalid
               localStorage.removeItem(`table_session_${tableId}`);
               setLocation('/session-ended');
             } else if (data.requiresNewSession && !sessionId) {
@@ -167,6 +198,7 @@ export default function TablePage() {
         })
         .then((session) => {
           if (session) {
+            console.log('New session created:', session);
             const sessionData = {
               sessionId: session.sessionId,
               startedAt: session.startedAt,
@@ -464,7 +496,7 @@ export default function TablePage() {
 
   if (isSessionEnded) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="w-[90%] max-w-md">
           <CardHeader>
             <CardTitle>Session Ended</CardTitle>
@@ -481,28 +513,13 @@ export default function TablePage() {
 
   if (!restaurantId || !tableId || isNaN(restaurantId) || isNaN(tableId)) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card className="w-[90%] max-w-md">
           <CardHeader>
             <CardTitle>Invalid Table</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>This table appears to be invalid. Please scan a valid QR code.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (isValidating) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card>
-          <CardHeader>
-            <CardTitle>Loading...</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>Verifying table information...</p>
+            <p className="text-muted-foreground">This table appears to be invalid. Please scan a valid QR code.</p>
           </CardContent>
         </Card>
       </div>
@@ -511,13 +528,13 @@ export default function TablePage() {
 
   if (!isValid) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card className="w-[90%] max-w-md">
           <CardHeader>
             <CardTitle>Invalid Table</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>This table appears to be invalid or no longer exists. Please scan a valid QR code.</p>
+            <p className="text-muted-foreground">This table appears to be invalid or no longer exists. Please scan a valid QR code.</p>
           </CardContent>
         </Card>
       </div>
@@ -526,7 +543,7 @@ export default function TablePage() {
 
   if (isSessionPromptOpen) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="w-[90%] max-w-md">
           <CardHeader>
             <CardTitle>Enter Session ID</CardTitle>
@@ -612,16 +629,16 @@ export default function TablePage() {
               <Card
                 className={`overflow-hidden transition-colors ${
                   request.type === "waiter"
-                    ? "hover:bg-purple-300 bg-purple-200"
+                    ? "hover:bg-purple-100 bg-purple-50"
                     : request.type === "water"
-                    ? "hover:bg-blue-200 bg-blue-100"
+                    ? "hover:bg-blue-100 bg-blue-50"
                     : request.type === "check"
-                    ? "hover:bg-emerald-300 bg-emerald-200"
-                    : "hover:bg-green-50/50"
+                    ? "hover:bg-emerald-100 bg-emerald-50"
+                    : "hover:bg-gray-100 bg-gray-50"
                 }`}
               >
                 <CardContent className="p-4">
-                  <div className="font-medium text-primary relative">
+                  <div className="font-medium text-foreground relative">
                     {request.type === "water" ? `Table ${request.table?.name} - Water Refill` :
                       request.type === "waiter" ? `Table ${request.table?.name} - Call Waiter` :
                         request.type === "check" ? `Table ${request.table?.name} - Get Check` :
@@ -639,7 +656,7 @@ export default function TablePage() {
                   )}
                   <div className="flex justify-between items-center mt-2">
                     <motion.div
-                      className="text-sm"
+                      className="text-sm text-foreground"
                       variants={statusVariants}
                       animate={request.status as keyof typeof statusVariants}
                       transition={{ duration: 0.3 }}
@@ -704,23 +721,7 @@ export default function TablePage() {
   };
 
   useEffect(() => {
-    const fetchRestaurant = async () => {
-      try {
-        const response = await fetch(`/api/restaurants/${restaurantId}`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch restaurant: ${response.status}`);
-        }
-        const data = await response.json();
-        setCurrentRestaurant(data);
-      } catch (error) {
-        console.error("Error fetching restaurant:", error);
-        // Handle error appropriately, perhaps display a message
-      }
-    };
-
-    if (restaurantId) {
-      fetchRestaurant();
-    }
+    //This effect is already handled by the useQuery hook above
   }, [restaurantId]);
 
   return (
@@ -943,6 +944,33 @@ export default function TablePage() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      className="w-full mt-4"
+                    >
+                      End Table Session
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>End Table Session?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will end the current table session. All members will be disconnected and a new session will be required for future requests.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => endSession()}
+                      >
+                        Yes, End Session
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+
               </div>
             </div>
 
@@ -982,35 +1010,6 @@ export default function TablePage() {
           </CardContent>
         </Card>
 
-        {isSessionCreator && (
-          <div className="mt-6">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                >
-                  End Table Session
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>End Table Session?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will end the current session for all users at this table.
-                    Any active requests will be cancelled.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => endSession()}>
-                    End Session
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        )}
       </motion.div>
     </div>
   );
