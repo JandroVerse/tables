@@ -387,7 +387,11 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastMousePosition = useRef<{ x: number; y: number } | null>(null);
-  const [initialDistance, setInitialDistance] = useState<number | null>(null);
+  const [initialDistance, setInitialDistance] = useState<{
+    distance: number;
+    centerX: number;
+    centerY: number;
+  } | null>(null);
   const [initialZoom, setInitialZoom] = useState<number | null>(null);
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
@@ -564,7 +568,17 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
           touch1.clientX - touch2.clientX,
           touch1.clientY - touch2.clientY
         );
-        setInitialDistance(distance);
+        // Calculate center point of the pinch
+        const centerX = (touch1.clientX + touch2.clientX) / 2;
+        const centerY = (touch1.clientY + touch2.clientY) / 2;
+
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const relativeX = (centerX - rect.left) / zoomLevel - panPosition.x;
+          const relativeY = (centerY - rect.top) / zoomLevel - panPosition.y;
+
+          setInitialDistance({ distance, centerX: relativeX, centerY: relativeY });
+        }
         setInitialZoom(zoomLevel);
       } else if (e.touches.length === 1) {
         // Single touch for panning
@@ -585,8 +599,22 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
           touch1.clientY - touch2.clientY
         );
 
-        const scale = currentDistance / initialDistance;
+        const scale = currentDistance / initialDistance.distance;
         const newZoom = Math.min(Math.max(0.5, initialZoom * scale), 2);
+
+        // Adjust pan position to keep the pinch center point stationary
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const centerX = (touch1.clientX + touch2.clientX) / 2;
+          const centerY = (touch1.clientY + touch2.clientY) / 2;
+
+          // Calculate the new position that keeps the pinch center point in place
+          const newPanX = (centerX - rect.left) / newZoom - initialDistance.centerX;
+          const newPanY = (centerY - rect.top) / newZoom - initialDistance.centerY;
+
+          setPanPosition({ x: -newPanX, y: -newPanY });
+        }
+
         setZoomLevel(newZoom);
       } else if (e.touches.length === 1 && isDragging && lastMousePosition.current) {
         // Single touch panning
