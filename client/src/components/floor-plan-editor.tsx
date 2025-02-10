@@ -642,30 +642,45 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
           <div className="relative" ref={containerRef}>
             <div
-              ref={editorRef}
-              className="relative h-[600px] border rounded-lg bg-gray-50 overflow-hidden touch-none"
-              onClick={() => setSelectedTable(null)}
+              className="h-[600px] border rounded-lg bg-gray-50 overflow-auto"
               style={{
-                transform: `scale(${zoomLevel})`,
-                transformOrigin: 'center',
-                transition: 'transform 0.2s ease-out'
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
-              {showGrid && <GridBackground />}
-              {tables.map((table) => (
-                <DraggableTable
-                  key={table.id}
-                  table={table}
-                  onDragStop={handleTableDragStop}
-                  onResize={handleTableResize}
-                  onDelete={deleteTable}
-                  selected={selectedTable === table.id}
-                  onClick={() => handleTableClick(table.id)}
-                  activeRequests={getActiveRequests(table.id)}
-                  editMode={editMode}
-                  hasActiveSession={getTableActiveSession(table.id)}
-                />
-              ))}
+              <div
+                ref={editorRef}
+                className="absolute touch-none"
+                onClick={() => setSelectedTable(null)}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  transform: `scale(${zoomLevel})`,
+                  transformOrigin: 'center',
+                  position: 'absolute',
+                  inset: 0,
+                  margin: 'auto',
+                  transition: 'transform 0.2s ease-out'
+                }}
+              >
+                {showGrid && <GridBackground />}
+                {tables.map((table) => (
+                  <DraggableTable
+                    key={table.id}
+                    table={table}
+                    onDragStop={handleTableDragStop}
+                    onResize={handleTableResize}
+                    onDelete={deleteTable}
+                    selected={selectedTable === table.id}
+                    onClick={() => handleTableClick(table.id)}
+                    activeRequests={getActiveRequests(table.id)}
+                    editMode={editMode}
+                    hasActiveSession={getTableActiveSession(table.id)}
+                  />
+                ))}
+              </div>
             </div>
 
             <QuickRequestPreview
