@@ -387,6 +387,8 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastMousePosition = useRef<{ x: number; y: number } | null>(null);
+  const [initialDistance, setInitialDistance] = useState<number | null>(null);
+  const [initialZoom, setInitialZoom] = useState<number | null>(null);
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
     queryKey: [`/api/restaurants/${restaurantId}/tables`],
@@ -553,24 +555,22 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
     const container = containerRef.current;
     if (!container) return;
 
-    let initialDistance = 0;
-    let initialZoom = 1;
-
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
         e.preventDefault();
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
-        initialDistance = Math.hypot(
+        const distance = Math.hypot(
           touch1.clientX - touch2.clientX,
           touch1.clientY - touch2.clientY
         );
-        initialZoom = zoomLevel;
+        setInitialDistance(distance);
+        setInitialZoom(zoomLevel);
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
+      if (e.touches.length === 2 && initialDistance && initialZoom) {
         e.preventDefault();
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
@@ -585,24 +585,31 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
+    const handleTouchEnd = () => {
+      setInitialDistance(null);
+      setInitialZoom(null);
+    };
+
     container.addEventListener('touchstart', handleTouchStart, { passive: false });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('wheel', handleWheel, { passive: false });
     container.addEventListener('mousedown', handleMouseDown);
     container.addEventListener('mousemove', handleMouseMove);
     container.addEventListener('mouseup', handleMouseUp);
     container.addEventListener('mouseleave', handleMouseUp);
 
     return () => {
-      container.removeEventListener('wheel', handleWheel);
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('wheel', handleWheel);
       container.removeEventListener('mousedown', handleMouseDown);
       container.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mouseup', handleMouseUp);
       container.removeEventListener('mouseleave', handleMouseUp);
     };
-  }, [zoomLevel, isDragging]);
+  }, [zoomLevel, isDragging, initialDistance, initialZoom]);
 
   return (
     <Card>
