@@ -574,10 +574,14 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
         if (containerRef.current) {
           const rect = containerRef.current.getBoundingClientRect();
-          const relativeX = (centerX - rect.left) / zoomLevel - panPosition.x;
-          const relativeY = (centerY - rect.top) / zoomLevel - panPosition.y;
+          const relativeX = centerX - rect.left;
+          const relativeY = centerY - rect.top;
 
-          setInitialDistance({ distance, centerX: relativeX, centerY: relativeY });
+          setInitialDistance({
+            distance,
+            centerX: relativeX,
+            centerY: relativeY
+          });
         }
         setInitialZoom(zoomLevel);
       } else if (e.touches.length === 1) {
@@ -602,17 +606,23 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
         const scale = currentDistance / initialDistance.distance;
         const newZoom = Math.min(Math.max(0.5, initialZoom * scale), 2);
 
-        // Adjust pan position to keep the pinch center point stationary
+        // Calculate the current center point
+        const centerX = (touch1.clientX + touch2.clientX) / 2;
+        const centerY = (touch1.clientY + touch2.clientY) / 2;
+
         if (containerRef.current) {
           const rect = containerRef.current.getBoundingClientRect();
-          const centerX = (touch1.clientX + touch2.clientX) / 2;
-          const centerY = (touch1.clientY + touch2.clientY) / 2;
 
-          // Calculate the new position that keeps the pinch center point in place
-          const newPanX = (centerX - rect.left) / newZoom - initialDistance.centerX;
-          const newPanY = (centerY - rect.top) / newZoom - initialDistance.centerY;
+          // Calculate the difference between the initial center and current center
+          const dx = centerX - rect.left - initialDistance.centerX;
+          const dy = centerY - rect.top - initialDistance.centerY;
 
-          setPanPosition({ x: -newPanX, y: -newPanY });
+          // Adjust the pan position based on zoom scaling and center point movement
+          const zoomFactor = newZoom / initialZoom;
+          setPanPosition(prev => ({
+            x: prev.x - (dx / newZoom) * (1 - 1/zoomFactor),
+            y: prev.y - (dy / newZoom) * (1 - 1/zoomFactor)
+          }));
         }
 
         setZoomLevel(newZoom);
@@ -624,8 +634,8 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
         const dy = touch.clientY - lastMousePosition.current.y;
 
         setPanPosition(prev => ({
-          x: prev.x + dx,
-          y: prev.y + dy
+          x: prev.x + dx / zoomLevel,
+          y: prev.y + dy / zoomLevel
         }));
 
         lastMousePosition.current = { x: touch.clientX, y: touch.clientY };
