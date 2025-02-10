@@ -213,7 +213,6 @@ const DraggableTable = ({
       }}
       disabled={resizing || !editMode}
       grid={[GRID_SIZE, GRID_SIZE]}
-      bounds="parent"
     >
       <motion.div
         className={`absolute cursor-move ${
@@ -383,8 +382,11 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   const [editMode, setEditMode] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastMousePosition = useRef<{ x: number; y: number } | null>(null);
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
     queryKey: [`/api/restaurants/${restaurantId}/tables`],
@@ -522,6 +524,31 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
     }
   };
 
+  const handleMouseDown = (e: MouseEvent) => {
+    if ((e.target as HTMLElement).closest('[data-table-id]')) return;
+    setIsDragging(true);
+    lastMousePosition.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging || !lastMousePosition.current) return;
+
+    const dx = e.clientX - lastMousePosition.current.x;
+    const dy = e.clientY - lastMousePosition.current.y;
+
+    setPanPosition(prev => ({
+      x: prev.x + dx,
+      y: prev.y + dy
+    }));
+
+    lastMousePosition.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    lastMousePosition.current = null;
+  };
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -561,13 +588,21 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
     container.addEventListener('wheel', handleWheel, { passive: false });
     container.addEventListener('touchstart', handleTouchStart, { passive: false });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('mousedown', handleMouseDown);
+    container.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mouseup', handleMouseUp);
+    container.addEventListener('mouseleave', handleMouseUp);
 
     return () => {
       container.removeEventListener('wheel', handleWheel);
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('mousedown', handleMouseDown);
+      container.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mouseup', handleMouseUp);
+      container.removeEventListener('mouseleave', handleMouseUp);
     };
-  }, [zoomLevel]);
+  }, [zoomLevel, isDragging]);
 
   return (
     <Card>
@@ -642,7 +677,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
           <div className="relative" ref={containerRef}>
             <div
-              className="h-[600px] border rounded-lg bg-gray-50 overflow-auto"
+              className="h-[600px] border rounded-lg bg-gray-50 overflow-hidden cursor-grab active:cursor-grabbing"
               style={{
                 position: 'relative',
                 display: 'flex',
@@ -657,12 +692,14 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
                 style={{
                   width: '100%',
                   height: '100%',
-                  transform: `scale(${zoomLevel})`,
+                  transform: `scale(${zoomLevel}) translate(${panPosition.x}px, ${panPosition.y}px)`,
                   transformOrigin: 'center',
                   position: 'absolute',
                   inset: 0,
                   margin: 'auto',
-                  transition: 'transform 0.2s ease-out'
+                  transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+                  minWidth: '100%',
+                  minHeight: '100%'
                 }}
               >
                 {showGrid && <GridBackground />}
