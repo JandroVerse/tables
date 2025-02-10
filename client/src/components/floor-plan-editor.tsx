@@ -566,6 +566,12 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
         );
         setInitialDistance(distance);
         setInitialZoom(zoomLevel);
+      } else if (e.touches.length === 1) {
+        // Single touch for panning
+        e.preventDefault();
+        const touch = e.touches[0];
+        lastMousePosition.current = { x: touch.clientX, y: touch.clientY };
+        setIsDragging(true);
       }
     };
 
@@ -582,12 +588,27 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
         const scale = currentDistance / initialDistance;
         const newZoom = Math.min(Math.max(0.5, initialZoom * scale), 2);
         setZoomLevel(newZoom);
+      } else if (e.touches.length === 1 && isDragging && lastMousePosition.current) {
+        // Single touch panning
+        e.preventDefault();
+        const touch = e.touches[0];
+        const dx = touch.clientX - lastMousePosition.current.x;
+        const dy = touch.clientY - lastMousePosition.current.y;
+
+        setPanPosition(prev => ({
+          x: prev.x + dx,
+          y: prev.y + dy
+        }));
+
+        lastMousePosition.current = { x: touch.clientX, y: touch.clientY };
       }
     };
 
     const handleTouchEnd = () => {
       setInitialDistance(null);
       setInitialZoom(null);
+      setIsDragging(false);
+      lastMousePosition.current = null;
     };
 
     container.addEventListener('touchstart', handleTouchStart, { passive: false });
