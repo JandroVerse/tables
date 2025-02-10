@@ -24,7 +24,7 @@ import {
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import { GlassWater, Bell, Receipt, MessageSquare, Trash2, Grid, WebhookIcon } from "lucide-react";
+import { GlassWater, Bell, Receipt, MessageSquare, Trash2, Grid, WebhookIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Table, Request } from "@db/schema";
@@ -382,7 +382,9 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
   const [showRequestPreview, setShowRequestPreview] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const editorRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const { data: tables = [] } = useQuery<TableWithPosition[]>({
     queryKey: [`/api/restaurants/${restaurantId}/tables`],
@@ -511,52 +513,99 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
 
   const selectedTableData = selectedTable ? tables.find(t => t.id === selectedTable) || null : null;
 
+  const handleWheel = (e: WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      setZoomLevel(prev => Math.min(Math.max(0.5, prev + delta), 2));
+    }
+  };
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => container.removeEventListener('wheel', handleWheel);
+    }
+  }, []);
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.1, 2));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.1, 0.5));
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Restaurant Floor</CardTitle>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="edit-mode"
-                  checked={editMode}
-                  onCheckedChange={(checked) => {
-                    setEditMode(checked as boolean);
-                    if (!checked && tables.length > 0) {
-                      tables.forEach(table => {
-                        const tableElement = document.querySelector(`[data-table-id="${table.id}"]`);
-                        if (tableElement) {
-                          const rect = tableElement.getBoundingClientRect();
-                          updateTablePosition({
-                            id: table.id,
-                            position: {
-                              ...table.position,
-                              x: snapToGrid(parseFloat(tableElement.style.transform.split('translate(')[1])),
-                              y: snapToGrid(parseFloat(tableElement.style.transform.split(', ')[1])),
-                              width: snapToGrid(rect.width),
-                              height: snapToGrid(rect.height)
-                            }
-                          });
+        <CardTitle>Restaurant Floor</CardTitle>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="edit-mode"
+              checked={editMode}
+              onCheckedChange={(checked) => {
+                setEditMode(checked as boolean);
+                if (!checked && tables.length > 0) {
+                  tables.forEach(table => {
+                    const tableElement = document.querySelector(`[data-table-id="${table.id}"]`);
+                    if (tableElement) {
+                      const rect = tableElement.getBoundingClientRect();
+                      updateTablePosition({
+                        id: table.id,
+                        position: {
+                          ...table.position,
+                          x: snapToGrid(parseFloat(tableElement.style.transform.split('translate(')[1])),
+                          y: snapToGrid(parseFloat(tableElement.style.transform.split(', ')[1])),
+                          width: snapToGrid(rect.width),
+                          height: snapToGrid(rect.height)
                         }
                       });
                     }
-                  }}
-                />
-                <Label htmlFor="edit-mode" className="font-medium text-sm">
-                  Edit Mode
-                </Label>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2"
-                onClick={() => setShowGrid(!showGrid)}
-              >
-                <Grid className="h-4 w-4" />
-                {showGrid ? "Hide Grid" : "Show Grid"}
-              </Button>
-            </div>
-          </CardHeader>
+                  });
+                }
+              }}
+            />
+            <Label htmlFor="edit-mode" className="font-medium text-sm">
+              Edit Mode
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleZoomOut}
+              disabled={zoomLevel <= 0.5}
+              className="h-8 w-8"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium w-16 text-center">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleZoomIn}
+              disabled={zoomLevel >= 2}
+              className="h-8 w-8"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+            onClick={() => setShowGrid(!showGrid)}
+          >
+            <Grid className="h-4 w-4" />
+            {showGrid ? "Hide Grid" : "Show Grid"}
+          </Button>
+        </div>
+      </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {editMode && (
@@ -582,11 +631,16 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
             </div>
           )}
 
-          <div className="relative">
+          <div className="relative" ref={containerRef}>
             <div
               ref={editorRef}
-              className="relative h-[600px] border rounded-lg bg-gray-50"
+              className="relative h-[600px] border rounded-lg bg-gray-50 overflow-hidden"
               onClick={() => setSelectedTable(null)}
+              style={{
+                transform: `scale(${zoomLevel})`,
+                transformOrigin: 'center',
+                transition: 'transform 0.2s ease-out'
+              }}
             >
               {showGrid && <GridBackground />}
               {tables.map((table) => (
