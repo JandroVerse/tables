@@ -24,7 +24,7 @@ import {
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import { GlassWater, Bell, Receipt, MessageSquare, Trash2, Grid, WebhookIcon, ZoomIn, ZoomOut } from "lucide-react";
+import { GlassWater, Bell, Receipt, MessageSquare, Trash2, Grid, WebhookIcon } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Table, Request } from "@db/schema";
@@ -517,25 +517,57 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const delta = e.deltaY < 0 ? 0.1 : -0.1;
-      setZoomLevel(prev => Math.min(Math.max(0.5, prev + delta), 2));
+      const newZoom = Math.min(Math.max(0.5, zoomLevel + delta), 2);
+      setZoomLevel(newZoom);
     }
   };
 
   useEffect(() => {
     const container = containerRef.current;
-    if (container) {
-      container.addEventListener('wheel', handleWheel, { passive: false });
-      return () => container.removeEventListener('wheel', handleWheel);
-    }
-  }, []);
+    if (!container) return;
 
-  const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev + 0.1, 2));
-  };
+    let initialDistance = 0;
+    let initialZoom = 1;
 
-  const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 0.1, 0.5));
-  };
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        initialDistance = Math.hypot(
+          touch1.clientX - touch2.clientX,
+          touch1.clientY - touch2.clientY
+        );
+        initialZoom = zoomLevel;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const currentDistance = Math.hypot(
+          touch1.clientX - touch2.clientX,
+          touch1.clientY - touch2.clientY
+        );
+
+        const scale = currentDistance / initialDistance;
+        const newZoom = Math.min(Math.max(0.5, initialZoom * scale), 2);
+        setZoomLevel(newZoom);
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [zoomLevel]);
 
   return (
     <Card>
@@ -557,8 +589,8 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
                         id: table.id,
                         position: {
                           ...table.position,
-                          x: snapToGrid(parseFloat(tableElement.style.transform.split('translate(')[1])),
-                          y: snapToGrid(parseFloat(tableElement.style.transform.split(', ')[1])),
+                          x: snapToGrid(parseFloat(tableElement.style.transform.split('translate(')[1].split(')')[0])),
+                          y: snapToGrid(parseFloat(tableElement.style.transform.split(', ')[1].split(')')[0])),
                           width: snapToGrid(rect.width),
                           height: snapToGrid(rect.height)
                         }
@@ -571,29 +603,6 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
             <Label htmlFor="edit-mode" className="font-medium text-sm">
               Edit Mode
             </Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleZoomOut}
-              disabled={zoomLevel <= 0.5}
-              className="h-8 w-8"
-            >
-              <ZoomOut className="h-4 w-4" />
-            </Button>
-            <span className="text-sm font-medium w-16 text-center">
-              {Math.round(zoomLevel * 100)}%
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleZoomIn}
-              disabled={zoomLevel >= 2}
-              className="h-8 w-8"
-            >
-              <ZoomIn className="h-4 w-4" />
-            </Button>
           </div>
           <Button
             variant="outline"
@@ -634,7 +643,7 @@ export function FloorPlanEditor({ restaurantId }: FloorPlanEditorProps) {
           <div className="relative" ref={containerRef}>
             <div
               ref={editorRef}
-              className="relative h-[600px] border rounded-lg bg-gray-50 overflow-hidden"
+              className="relative h-[600px] border rounded-lg bg-gray-50 overflow-hidden touch-none"
               onClick={() => setSelectedTable(null)}
               style={{
                 transform: `scale(${zoomLevel})`,
