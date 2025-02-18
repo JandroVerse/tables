@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: your-app-name
+    env: node
+    nodeVersion: 18.x
+    buildCommand: |
+      npm install --include=dev
+      npm run build:client
+      npm run build:server
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false 

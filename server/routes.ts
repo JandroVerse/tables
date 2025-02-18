@@ -304,7 +304,13 @@ export function registerRoutes(app: Express): Server {
             // Generate QR code with full URL - updated to use the correct route
             const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
             const tableUrl = `${protocol}://${domain}/request/${restaurantId}/${table.id}`;
-            console.log('Generating QR code for URL:', tableUrl);
+            console.log('Generated table URL for QR:', {
+                protocol,
+                domain,
+                restaurantId,
+                tableId: table.id,
+                fullUrl: tableUrl
+            });
 
             const qrCodeSvg = await QRCode.toString(tableUrl, {
                 type: 'svg',
@@ -950,6 +956,12 @@ export function registerRoutes(app: Express): Server {
             console.error('Error fetching table sessions:', error);
             res.status(500).json({ message: "Failed to fetch table sessions" });
         }
+    });
+
+    app.get('/api/qr-test/:id', (req, res) => {
+        const fullUrl = `${req.protocol}://${req.get('host')}/your-target-path/${req.params.id}`;
+        console.log('QR Code URL:', fullUrl);
+        res.send(`QR Code would redirect to: ${fullUrl}`);
     });
 
     return httpServer;
