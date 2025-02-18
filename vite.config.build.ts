@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { fileURLToPath } from "url";
+import themePlugin from "@replit/vite-plugin-shadcn-theme-json";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -9,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDir = path.resolve(__dirname, 'client');
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), themePlugin()],
   root: path.join(__dirname, "client"),
   base: '',
   build: {
