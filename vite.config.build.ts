@@ -10,20 +10,21 @@ const clientDir = path.resolve(__dirname, 'client');
 
 export default defineConfig({
   plugins: [react()],
-  root: clientDir,  // Set root to client directory
+  root: path.join(__dirname, "client"),
   base: '',
   build: {
-    outDir: path.resolve(__dirname, 'dist', 'client'),
+    outDir: path.join(__dirname, "dist", "server", "public"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
     sourcemap: true,
     rollupOptions: {
-      input: path.resolve(clientDir, 'index.html')
+      input: path.join(__dirname, "client", "index.html")
     }
   },
   resolve: {
     alias: {
-      '@': path.resolve(clientDir, 'src'),
-      '@db': path.resolve(__dirname, 'db')
+      '@': path.join(__dirname, "client", "src"),
+      '@db': path.join(__dirname, "db")
     }
   }
 }); 
