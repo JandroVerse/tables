@@ -1,6 +1,9 @@
 {
   "name": "default",
-  "type": "light",
+  "appearance": "light",
+  "primary": "hsl(142.1, 76.2%, 36.3%)",
+  "variant": "vibrant",
+  "radius": 0.5,
   "colors": {
     "--background": "0 0% 100%",
     "--foreground": "222.2 84% 4.9%",
@@ -20,7 +23,6 @@
     "--destructive-foreground": "210 20% 98%",
     "--border": "220 13% 91%",
     "--input": "220 13% 91%",
-    "--ring": "142.1 76.2% 36.3%",
-    "--radius": "0.5rem"
+    "--ring": "142.1 76.2% 36.3%"
   }
 }
