@@ -24,7 +24,8 @@ function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
         new RegExp('^/api/restaurants/\\d+/tables/\\d+/sessions/end$'),
         new RegExp('^/api/requests$'),
         new RegExp('^/api/requests/\\d+$'),
-        new RegExp('^/ws$')
+        new RegExp('^/ws$'),
+        new RegExp('^/api/restaurants/\\d+/table-sessions$')
     ];
 
     // Check if the current path matches any of the public paths
